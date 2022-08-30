@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "D:/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/",
+                "D:/emsdk/upstream/emscripten/cache/sysroot/include",
+                "D:/Dev/C++/LIB/imgui",
+                "D:/Dev/C++/LIB/Mova/src"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "__EMSCRIPTEN__"
+            ],
+            "windowsSdkVersion": "10.0.19041.0",
+            "compilerPath": "D:/emsdk/upstream/emscripten/em++.bat",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-x64",
+            "configurationProvider": "ms-vscode.makefile-tools"
+        }
+    ],
+    "version": 4
+}

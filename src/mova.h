@@ -51,7 +51,7 @@ struct Image {
 };
 
 struct Window {
-#ifdef __EMSCRIPTEN__
+#ifdef __aEMSCRIPTEN__
   emscripten::val canvas, ctx;
   EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext;
   Window(emscripten::val canvas, emscripten::val ctx, EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext) : canvas(canvas), ctx(ctx), glContext(glContext) {}
@@ -105,7 +105,7 @@ const Color black = Color(0), white = Color(255), grey = Color(150), red = Color
 
 /*                    FUNCTIONS                    */
 Window* createWindow(const std::string& title, bool gl = false);
-Image* loadImage(const std::string& filename);
+Image* loadImage(const std::string& filename, Window* window);
 Audio* loadAudio(const std::string& filename);
 void destroyWindow(Window* window);
 void destroyImage(Image* image);
@@ -121,15 +121,20 @@ void clear(Window* window, Color color = black);
 
 void drawImage(Window* window, Image* image, int x, int y, int w = -1, int h = -1, bool flip = false, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
-// void setFont(Window* window, std::string font) { window->ctx.set("font", font); }
+void setFont(Window* window, std::string font);
 void drawText(Window* window, int x, int y, std::string text, Color color = white);
 int textWidth(Window* window, std::string text);
 int textHeight(Window* window, std::string text);
+
+void pushTransform(Window* window);
+void popTransform(Window* window);
+void rotate(Window* window, int x, int y, float angle);
 
 void playAudio(Audio* audio);
 
 float deltaTime();
 
+// TODO: window related, is window focused
 ScrollCallback setScrollCallback(ScrollCallback callback);
 MouseCallback setMouseCallback(MouseCallback callback);
 KeyCallback setKeyCallback(KeyCallback callback);
@@ -144,13 +149,13 @@ bool isMouseButtonPressed(MouseButton button);
 bool isMouseButtonReleased(MouseButton button);
 bool isMouseButtonHeld(MouseButton button);
 
-int getMouseX();
-int getMouseY();
+int getMouseX(Window* window);
+int getMouseY(Window* window);
 
 float getScrollX();
 float getScrollY();
 
-void nextFrame(Window* window);
+void nextFrame();
 
 void setGLContext(Window* window);
 void loadDefaultShader();

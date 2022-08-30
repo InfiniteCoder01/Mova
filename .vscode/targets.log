@@ -1,0 +1,478 @@
+make.exe all --print-data-base --no-builtin-variables --no-builtin-rules --question
+make: *** No rule to make target 'all'.  Stop.
+
+# GNU Make 4.3
+# Built for Windows32
+# Copyright (C) 1988-2020 Free Software Foundation, Inc.
+# License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+# This is free software: you are free to change and redistribute it.
+# There is NO WARRANTY, to the extent permitted by law.
+
+# Make data base, printed on Tue Aug 30 21:20:16 2022
+
+# Variables
+
+# environment
+SYSTEMDRIVE = C:
+# environment
+JAVA_HOME = C:\Program Files\Java\jdk-18.0.1
+# environment
+LC_ALL = C
+# environment
+OANOCACHE = 1
+# makefile (from 'Makefile', line 4)
+ImGUI_OBJ := build/ImGUI/imgui.cpp.o
+# environment
+USERPROFILE = C:\Users\Dima Lobach
+# environment
+LOCALAPPDATA = C:\Users\Dima Lobach\AppData\Local
+# makefile (from 'Makefile', line 9)
+Include := -I D:/Dev/C++/LIB/imgui -I D:/Dev/C++/LIB/Mova/src
+# environment
+VSCODE_CWD = C:\Users\Dima Lobach\AppData\Local\Programs\Microsoft VS Code
+# makefile (from 'Makefile', line 10)
+Flags := -D IMGUI_IMPL_OPENGL_ES2
+# environment
+SYSTEMROOT = C:\Windows
+# environment
+PROCESSOR_LEVEL = 23
+# environment
+PSMODULEPATH = C:\Program Files\WindowsPowerShell\Modules;C:\Windows\system32\WindowsPowerShell\v1.0\Modules
+# default
+MAKE_COMMAND := make.exe
+# automatic
+@D = $(patsubst %/,%,$(patsubst %\,%,$(dir $@)))
+# environment
+CHROME_CRASHPAD_PIPE_NAME = \\.\pipe\crashpad_18372_PDZRYZMNUGAFEBIC
+# environment
+VSCODE_HANDLES_UNCAUGHT_ERRORS = true
+# environment
+VK_SDK_PATH = C:\VulkanSDK\1.3.216.0
+# default
+.VARIABLES := 
+# automatic
+%D = $(patsubst %/,%,$(patsubst %\,%,$(dir $%)))
+# automatic
+^D = $(patsubst %/,%,$(patsubst %\,%,$(dir $^)))
+# automatic
+%F = $(notdir $%)
+# environment
+VSCODE_CODE_CACHE_PATH = C:\Users\Dima Lobach\AppData\Roaming\Code\CachedData\da76f93349a72022ca4670c1b84860304616aaa2
+# environment
+LANG = C
+# default
+.LOADED := 
+# environment
+TMP = C:\Temp
+# default
+.INCLUDE_DIRS = .
+# environment
+XEDK = C:\Program Files (x86)\Microsoft Xbox 360 SDK
+# makefile
+MAKEFLAGS = pqrR
+# makefile
+CURDIR := d:/Dev/C++/Games/Weather
+# environment
+APPLICATION_INSIGHTS_NO_DIAGNOSTIC_CHANNEL = 1
+# automatic
+*D = $(patsubst %/,%,$(patsubst %\,%,$(dir $*)))
+# environment
+PROGRAMFILES = C:\Program Files
+# environment
+MFLAGS = -pqrR
+# default
+.SHELLFLAGS := -c
+# makefile (from 'Makefile', line 11)
+Linker := -s ASYNCIFY -s WASM=1 -s MAX_WEBGL_VERSION=2 -s ALLOW_MEMORY_GROWTH=1 --bind --use-preload-plugins
+# environment
+COMMONPROGRAMW6432 = C:\Program Files\Common Files
+# automatic
++D = $(patsubst %/,%,$(patsubst %\,%,$(dir $+)))
+# environment
+IDF_TOOLS_PATH = C:\Espressif
+# makefile (from 'Makefile', line 1)
+MAKEFILE_LIST := Makefile
+# automatic
+@F = $(notdir $@)
+# environment
+VSCODE_PID = 18372
+# automatic
+?D = $(patsubst %/,%,$(patsubst %\,%,$(dir $?)))
+# automatic
+*F = $(notdir $*)
+# makefile (from 'Makefile', line 3)
+ImGUI := D:/Dev/C++/LIB/imgui
+# automatic
+<D = $(patsubst %/,%,$(patsubst %\,%,$(dir $<)))
+# environment
+VSCODE_NLS_CONFIG = {"locale":"en","availableLanguages":{},"_languagePackSupport":true}
+# default
+MAKE_HOST := Windows32
+# environment
+PROGRAMDATA = C:\ProgramData
+# default
+SHELL := sh.exe
+# environment
+HOMEPATH = \Users\Dima Lobach
+# default
+MAKECMDGOALS := all
+# environment
+DRIVERDATA = C:\Windows\System32\Drivers\DriverData
+# environment
+COMSPEC = C:\Windows\system32\cmd.exe
+# environment
+WINDIR = C:\Windows
+# environment
+MAKELEVEL := 0
+# default
+MAKE = $(MAKE_COMMAND)
+# environment
+PATH = C:\VulkanSDK\1.3.216.0\Bin;C:\Program Files\Microsoft\jdk-11.0.12.7-hotspot\bin;C:\Program Files\Common Files\Oracle\Java\javapath;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\GtkSharp\2.12\bin;C:\Program Files\nodejs\;C:\Program Files\CMake\bin;C:\Program Files (x86)\Bitvise SSH Client;C:\Windows\System32\OpenSSH\;C:\Users\Dima Lobach\AppData\Local\Microsoft\WindowsApps;C:\Users\Dima Lobach\AppData\Local\GitHubDesktop\bin;C:\Users\Dima Lobach\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\Java\jdk-18.0.1\bin;C:\Users\Dima Lobach\AppData\Roaming\npm;C:\MinGW\bin\;C:\Program Files\dotnet\;C:\Program Files (x86)\Microsoft SQL Server\100\Tools\Binn\;C:\Program Files\Microsoft SQL Server\100\Tools\Binn\;C:\Program Files\Microsoft SQL Server\100\DTS\Binn\;C:\Program Files\Git\cmd;C:\Users\Dima Lobach\AppData\Local\Microsoft\WindowsApps;C:\Users\Dima Lobach\AppData\Local\GitHubDesktop\bin;C:\Users\Dima Lobach\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\Java\jdk-18.0.1\bin;C:\Users\Dima Lobach\AppData\Roaming\npm;C:\Users\Dima Lobach\.dotnet\tools;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.32.31326\bin\Hostx64\x64;C:\Program Files (x86)\GnuWin32\bin;D:\Path;D:\emsdk\upstream\emscripten;
+# environment
+COMPUTERNAME = HOME-PC
+# default
+MAKEFILES := 
+# automatic
+^F = $(notdir $^)
+# environment
+PROMPT = $P$G
+# environment
+LOGONSERVER = \\HOME-PC
+# environment
+USERNAME = Dima Lobach
+# environment
+COMMONPROGRAMFILES = C:\Program Files\Common Files
+# automatic
+?F = $(notdir $?)
+# environment
+PROGRAMW6432 = C:\Program Files
+# makefile (from 'Makefile', line 7)
+Mova_OBJ := build/Mova/glUtil.cpp.o
+# environment
+PATHEXT = .COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
+# automatic
++F = $(notdir $+)
+# environment
+ORIGINAL_XDG_CURRENT_DESKTOP = undefined
+# environment
+USERDOMAIN = HOME-PC
+# 'override' directive
+GNUMAKEFLAGS := 
+# environment
+OS = Windows_NT
+# environment
+__COMPAT_LAYER = RunAsAdmin
+# makefile
+.DEFAULT_GOAL := html/index.html
+# default
+MAKE_VERSION := 4.3
+# environment
+PROGRAMFILES(X86) = C:\Program Files (x86)
+# environment
+USERDOMAIN_ROAMINGPROFILE = HOME-PC
+# environment
+NUMBER_OF_PROCESSORS = 8
+# environment
+PUBLIC = C:\Users\Public
+# makefile (from 'Makefile', line 6)
+Mova := D:/Dev/C++/LIB/Mova/src
+# environment
+APPDATA = C:\Users\Dima Lobach\AppData\Roaming
+# environment
+HOMEDRIVE = C:
+# environment
+VULKAN_SDK = C:\VulkanSDK\1.3.216.0
+# environment
+PROCESSOR_ARCHITECTURE = AMD64
+# environment
+VSCODE_AMD_ENTRYPOINT = vs/workbench/api/node/extensionHostProcess
+# environment
+COMMONPROGRAMFILES(X86) = C:\Program Files (x86)\Common Files
+# makefile (from 'Makefile', line 12)
+Settings := -o html/index.html --shell-file html/basic_template.html --preload-file Assets
+# environment
+ELECTRON_RUN_AS_NODE = 1
+# environment
+TEMP = C:\Temp
+# environment
+VSCODE_IPC_HOOK = \\.\pipe\acdaca36aa32cd8a9b05cdc1d5f2c1c8-1.70.0-main-sock
+# default
+.RECIPEPREFIX := 
+# automatic
+<F = $(notdir $<)
+# default
+SUFFIXES := 
+# environment
+ALLUSERSPROFILE = C:\ProgramData
+# environment
+SESSIONNAME = Console
+# environment
+VS100COMNTOOLS = C:\Program Files (x86)\Microsoft Visual Studio 10.0\Common7\Tools\
+# default
+.FEATURES := target-specific order-only second-expansion else-if shortest-stem undefine oneshell nocomment grouped-target extra-prereqs archives jobserver output-sync load
+# environment
+PROCESSOR_REVISION = 1801
+# makefile (from 'Makefile', line 1)
+CXX := em++
+# environment
+PROCESSOR_IDENTIFIER = AMD64 Family 23 Model 24 Stepping 1, AuthenticAMD
+# variable set hash-table stats:
+# Load=102/1024=10%, Rehash=0, Collisions=15/141=11%
+
+# Pattern-specific Variable Values
+
+# No pattern-specific variable values.
+
+# Directories
+
+# D:/Dev/C++/LIB/imgui (key D:/Dev/C++/LIB/imgui, mtime 1659707333): 23 files, no impossibilities.
+# Assets (key d:/Dev/C++/Games/Weather/Assets, mtime 1661856648): 4 files, no impossibilities.
+# build/ImGUI (key d:/Dev/C++/Games/Weather/build/ImGUI, mtime 1661573070): 8 files, no impossibilities.
+# src (key d:/Dev/C++/Games/Weather/src, mtime 1661797944): 9 files, no impossibilities.
+# D:/Dev/C++/LIB/Mova/src (key D:/Dev/C++/LIB/Mova/src, mtime 1661883600): 10 files, no impossibilities.
+# build/Mova (key d:/Dev/C++/Games/Weather/build/Mova, mtime 1661883102): 5 files, no impossibilities.
+# . (key d:/Dev/C++/Games/Weather, mtime 1661621421): 9 files, no impossibilities.
+
+# 68 files, no impossibilities in 7 directories.
+
+# Implicit Rules
+
+# No implicit rules.
+
+# Files
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/backends/imgui_impl_opengl3.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+html/index.html: build/ImGUI/imgui.cpp.o build/Mova/glUtil.cpp.o Assets/Sound Assets/Textures src/level.hpp src/main.cpp src/objects.hpp src/particles.hpp src/pc.hpp src/player.hpp src/weather.hpp
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 15):
+	@echo Building Application...
+	@$(CXX) $(wildcard src/*.cpp build/*/*.o) $(Flags) $(Linker) $(Include) $(Settings)
+
+build/Mova/glUtil.cpp.o: D:/Dev/C++/LIB/Mova/src/glUtil.cpp D:/Dev/C++/LIB/Mova/src/imguiImpl.cpp D:/Dev/C++/LIB/Mova/src/movaEmsc.cpp D:/Dev/C++/LIB/Mova/src/movaWin.cpp D:/Dev/C++/LIB/Mova/src/glUtil.h D:/Dev/C++/LIB/Mova/src/imguiImpl.h D:/Dev/C++/LIB/Mova/src/mova.h
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 23):
+	@echo Building Mova...
+	@for %%f in ($(wildcard $(Mova)/*.cpp)) do @$(CXX) -c %%f $(Flags) $(Include) -o build/Mova/%%~nxf.o
+
+# Not a target:
+src/level.hpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+Makefile:
+#  Implicit rule search has been done.
+#  Last modified 2022-08-30 21:20:15
+#  File has been updated.
+#  Successfully updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imstb_truetype.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imgui_tables.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+Assets/Sound:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+src/main.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imgui_draw.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/Mova/src/imguiImpl.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imstb_rectpack.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+src/particles.hpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imgui_demo.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imgui_internal.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/Mova/src/imguiImpl.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/Mova/src/mova.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.DEFAULT:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+all:
+#  Command line target.
+#  Implicit rule search has been done.
+#  File does not exist.
+#  File has not been updated.
+
+# Not a target:
+Assets/Textures:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/Mova/src/movaEmsc.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imconfig.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/Mova/src/glUtil.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+src/pc.hpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+src/weather.hpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/backends/imgui_impl_opengl3.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imgui_widgets.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imgui.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imstb_textedit.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+build/ImGUI/imgui.cpp.o: D:/Dev/C++/LIB/imgui/imgui.cpp D:/Dev/C++/LIB/imgui/imgui_demo.cpp D:/Dev/C++/LIB/imgui/imgui_draw.cpp D:/Dev/C++/LIB/imgui/imgui_tables.cpp D:/Dev/C++/LIB/imgui/imgui_widgets.cpp D:/Dev/C++/LIB/imgui/imconfig.h D:/Dev/C++/LIB/imgui/imgui.h D:/Dev/C++/LIB/imgui/imgui_internal.h D:/Dev/C++/LIB/imgui/imstb_rectpack.h D:/Dev/C++/LIB/imgui/imstb_textedit.h D:/Dev/C++/LIB/imgui/imstb_truetype.h D:/Dev/C++/LIB/imgui/backends/imgui_impl_opengl3.cpp D:/Dev/C++/LIB/imgui/backends/imgui_impl_opengl3.h
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 19):
+	@echo Building ImGUI...
+	@for %%f in ($(wildcard $(ImGUI)/*.cpp $(ImGUI)/backends/imgui_impl_opengl3.cpp)) do @$(CXX) -c %%f $(Flags) $(Include) -o build/ImGUI/%%~nxf.o
+
+# Not a target:
+D:/Dev/C++/LIB/imgui/imgui.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/Mova/src/glUtil.h:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+src/objects.hpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+src/player.hpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+D:/Dev/C++/LIB/Mova/src/movaWin.cpp:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# files hash-table stats:
+# Load=36/1024=4%, Rehash=0, Collisions=2/79=3%
+# VPATH Search Paths
+
+# No 'vpath' search paths.
+
+# No general ('VPATH' variable) search path.
+
+# strcache buffers: 1 (0) / strings = 95 / storage = 1684 B / avg = 17 B
+# current buf: size = 8162 B / used = 1684 B / count = 95 / avg = 17 B
+
+# strcache performance: lookups = 118 / hit rate = 19%
+# hash-table stats:
+# Load=95/8192=1%, Rehash=0, Collisions=0/118=0%
+# Finished Make data base on Tue Aug 30 21:20:16 2022
+
+ 

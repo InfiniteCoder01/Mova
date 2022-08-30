@@ -21,21 +21,19 @@ static MouseCallback userMouseCallback;
 static KeyCallback userKeyCallback;
 static Shader* defaultShader;
 
-static bool webGL = false, bAntialiasing = true;
-static float mouseX, mouseY;
-
 /*                    DATA                    */
-struct __Window {
+struct __Window : Window {
+  bool antialiasing, gl = false;
+  int mouseX, mouseY;
   val canvas;
   union {
     val ctx;
-    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext;
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = 0;
   };
 
   __Window(val canvas, val ctx) : canvas(canvas), ctx(ctx) {}
-  __Window(val canvas, EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext) : canvas(canvas), glContext(glContext) {}
+  __Window(val canvas, EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext) : canvas(canvas), glContext(glContext), gl(true) {}
 };
-std::map<std::string, __Window*> windows;
 
 // clang-format off
 Color::Color(int red, int green, int blue, int alpha) { sprintf(color, "#%02x%02x%02x%02x", red, green, blue, alpha); }
@@ -116,14 +114,14 @@ std::map<std::string, Key> keyMap = {
 
 /*                    CALLBACKS                    */
 EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData) {
-  mouseX = e->targetX;
-  mouseY = e->targetY;
+  ((__Window*)userData)->mouseX = e->targetX;
+  ((__Window*)userData)->mouseY = e->targetY;
   mousePressed = ~mouseState & e->buttons;
   mouseReleased = mouseState & ~e->buttons;
   mouseState = e->buttons;
   if (userMouseCallback) {
     MouseButton button = (MouseButton)(1 << e->button);
-    userMouseCallback(mouseX, mouseY, button, isMouseButtonHeld(button));
+    userMouseCallback(((__Window*)userData)->mouseX, ((__Window*)userData)->mouseY, button, isMouseButtonHeld(button));
   }
   return true;
 }
@@ -163,42 +161,40 @@ Window* createWindow(const std::string& title, bool gl) {
     });
   );
   // clang-format on
-  emscripten_set_click_callback("#canvas", nullptr, false, mouseCallback);
-  emscripten_set_mousedown_callback("#canvas", nullptr, false, mouseCallback);
-  emscripten_set_mouseup_callback("#canvas", nullptr, false, mouseCallback);
-  emscripten_set_dblclick_callback("#canvas", nullptr, false, mouseCallback);
-  emscripten_set_mousemove_callback("#canvas", nullptr, false, mouseCallback);
-  emscripten_set_wheel_callback("#canvas", nullptr, false, mouseScrollCallback);
-  emscripten_set_keydown_callback("#canvas", (void*)true, true, keyCallback);
-  emscripten_set_keyup_callback("#canvas", (void*)false, true, keyCallback);
   val canvas = JSdocument.call<val>("getElementById", val("canvas"));
-  val ctx = val::null();
-  EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext;
+  __Window* window;
   if (gl) {
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
-    glContext = emscripten_webgl_create_context("#canvas", &attrs);
-    webGL = true;
-    windows[title] = new __Window(canvas, glContext);
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = emscripten_webgl_create_context("#canvas", &attrs);
+    window = new __Window(canvas, glContext);
   } else {
-    ctx = canvas.call<val>("getContext", val("2d"));
-    windows[title] = new __Window(canvas, ctx);
+    window = new __Window(canvas, canvas.call<val>("getContext", val("2d")));
   }
-  return new Window(canvas, ctx, glContext);
+
+  emscripten_set_click_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_mousedown_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_mouseup_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_dblclick_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_mousemove_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_wheel_callback("#canvas", nullptr, false, mouseScrollCallback);
+  emscripten_set_keydown_callback("#canvas", (void*)true, true, keyCallback);
+  emscripten_set_keyup_callback("#canvas", (void*)false, true, keyCallback);
+  return window;
 }
 
-Image* loadImage(const std::string& filename) {
+Image* loadImage(const std::string& filename, Window* window) {
   int width, height;
   char* image = emscripten_get_preloaded_image_data(filename.c_str(), &width, &height);
   assert(image && "Failed to load image");
-  if (webGL) {
+  if (((__Window*)window)->gl) {
     GLuint texture;
     glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, bAntialiasing ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, bAntialiasing ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     free(image);
@@ -239,7 +235,7 @@ Audio* loadAudio(const std::string& filename) {
 
 // Destroying things
 void destroyWindow(Window* window) {
-  if (window->glContext) emscripten_webgl_destroy_context(window->glContext);
+  if (((__Window*)window)->gl) emscripten_webgl_destroy_context(((__Window*)window)->glContext);
   delete window;
 }
 
@@ -255,27 +251,27 @@ void destroyImage(Image* image) {
 void destroyAudio(Audio* audio) { delete audio; }
 
 // Params
-int windowWidth(Window* window) { return window->canvas["width"].as<int>(); }
-int windowHeight(Window* window) { return window->canvas["height"].as<int>(); }
+int windowWidth(Window* window) { return ((__Window*)window)->canvas["width"].as<int>(); }
+int windowHeight(Window* window) { return ((__Window*)window)->canvas["height"].as<int>(); }
 void antialiasing(Window* window, bool enabled) {
-  window->ctx.set("imageSmoothingEnabled", enabled);
-  bAntialiasing = enabled;
+  ((__Window*)window)->antialiasing = enabled;
+  EM_ASM({ addOnPostRun(function() { Module.canvas.getContext('2d').imageSmoothingEnabled = $0; }); }, enabled);
 }
 
 // Drawment
 void fillRect(Window* window, int x, int y, int w, int h, Color color) {
-  if (webGL) {
+  if (((__Window*)window)->gl) {
     setShaderBool(defaultShader, "textured", false);
     setShaderColor(defaultShader, "color", color.red() / 255.f, color.green() / 255.f, color.blue() / 255.f, color.alpha() / 255.f);
     glFillRect(x, y, w, h, windowWidth(window), windowHeight(window));
   } else {
-    window->ctx.set("fillStyle", color.color);
-    window->ctx.call<void>("fillRect", x, y, w, h);
+    ((__Window*)window)->ctx.set("fillStyle", color.color);
+    ((__Window*)window)->ctx.call<void>("fillRect", x, y, w, h);
   }
 }
 
 void clear(Window* window, Color color) {
-  if (webGL) {
+  if (((__Window*)window)->gl) {
     glClearColor(color.red() / 255.f, color.green() / 255.f, color.blue() / 255.f, color.alpha() / 255.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   } else {
@@ -288,28 +284,39 @@ void drawImage(Window* window, Image* image, int x, int y, int w, int h, bool fl
   if (h == -1) h = image->height;
   if (srcW == -1) srcW = image->width;
   if (srcH == -1) srcH = image->height;
-  if (webGL) {
+  if (((__Window*)window)->gl) {
     setShaderBool(defaultShader, "textured", true);
     setShaderInt(defaultShader, "texture1", 0);
     glDrawImage(image->texture, x, y, w, h, windowWidth(window), windowHeight(window), flip, srcX, srcY, srcW, srcH, image->width, image->height);
   } else {
     if (flip) {
-      window->ctx.call<void>("save");
-      window->ctx.call<void>("translate", windowWidth(window), 0);
-      window->ctx.call<void>("scale", -1, 1);
+      ((__Window*)window)->ctx.call<void>("save");
+      ((__Window*)window)->ctx.call<void>("translate", windowWidth(window), 0);
+      ((__Window*)window)->ctx.call<void>("scale", -1, 1);
     }
-    window->ctx.call<void>("drawImage", image->JSimage, srcX, srcY, srcW, srcH, (flip ? windowWidth(window) - x : x), y, w * (flip ? -1 : 1), h);
-    if (flip) window->ctx.call<void>("restore");
+    ((__Window*)window)->ctx.call<void>("drawImage", image->JSimage, srcX, srcY, srcW, srcH, (flip ? windowWidth(window) - x : x), y, w * (flip ? -1 : 1), h);
+    if (flip) ((__Window*)window)->ctx.call<void>("restore");
   }
 }
 
+void setFont(Window* window, std::string font) { ((__Window*)window)->ctx.set("font", font); }
+
 void drawText(Window* window, int x, int y, std::string text, Color color) {
-  window->ctx.set("fillStyle", color.color);
-  window->ctx.call<void>("fillText", text, x, y);
+  ((__Window*)window)->ctx.set("fillStyle", color.color);
+  ((__Window*)window)->ctx.call<void>("fillText", text, x, y);
 }
 
-int textWidth(Window* window, std::string text) { return window->ctx.call<val>("measureText", text)["width"].as<int>(); }
-int textHeight(Window* window, std::string text) { return window->ctx.call<val>("measureText", text)["height"].as<int>(); }
+int textWidth(Window* window, std::string text) { return ((__Window*)window)->ctx.call<val>("measureText", text)["width"].as<int>(); }
+int textHeight(Window* window, std::string text) { return ((__Window*)window)->ctx.call<val>("measureText", text)["height"].as<int>(); }
+
+// Transform
+void pushTransform(Window* window) { ((__Window*)window)->ctx.call<void>("save"); }
+void popTransform(Window* window) { ((__Window*)window)->ctx.call<void>("restore"); }
+void rotate(Window* window, int x, int y, float angle) {
+  ((__Window*)window)->ctx.call<void>("translate", x, y);
+  ((__Window*)window)->ctx.call<void>("rotate", angle);
+  ((__Window*)window)->ctx.call<void>("translate", -x, -y);
+}
 
 // Audio
 void playAudio(Audio* audio) { audio->audio.call<void>("play"); }
@@ -346,14 +353,14 @@ bool isMouseButtonPressed(MouseButton button) { return (mousePressed & button) !
 bool isMouseButtonReleased(MouseButton button) { return (mouseReleased & button) != 0; }
 bool isMouseButtonHeld(MouseButton button) { return (mouseState & button) != 0; }
 
-int getMouseX() { return mouseX; }
-int getMouseY() { return mouseY; }
+int getMouseX(Window* window) { return ((__Window*)window)->mouseX; }
+int getMouseY(Window* window) { return ((__Window*)window)->mouseY; }
 
 float getScrollX() { return scrollX; }
 float getScrollY() { return scrollY; }
 
 // Next frame
-void nextFrame(Window* window) {
+void nextFrame() {
   static auto t = std::chrono::steady_clock::now();
   dt = (std::chrono::steady_clock::now() - t).count() / 1000000000.0;
   t = std::chrono::steady_clock::now();
@@ -396,9 +403,7 @@ const std::string fragmentShader = R"(
     }
   )";
 
-void setGLContext(Window* window) { emscripten_webgl_make_context_current(window->glContext); }
-
+void setGLContext(Window* window) { emscripten_webgl_make_context_current(((__Window*)window)->glContext); }
 void loadDefaultShader() { defaultShader = loadShader(vertexShader, fragmentShader); }
-
 void useDefaultShader() { useShader(defaultShader); }
 #endif

@@ -1,0 +1,9 @@
+make.exe --dry-run --keep-going --print-directory
+make: Entering directory 'd:/Dev/C++/Games/Weather'
+echo Building Mova...
+for %%f in (D:/Dev/C++/LIB/Mova/src/glUtil.cpp D:/Dev/C++/LIB/Mova/src/imguiImpl.cpp D:/Dev/C++/LIB/Mova/src/movaEmsc.cpp D:/Dev/C++/LIB/Mova/src/movaWin.cpp) do @em++ -c %%f -D IMGUI_IMPL_OPENGL_ES2 -I D:/Dev/C++/LIB/imgui -I D:/Dev/C++/LIB/Mova/src -o build/Mova/%%~nxf.o
+ 
+echo Building Application...
+em++ src/main.cpp build/ImGUI/imgui.cpp.o build/ImGUI/imgui_demo.cpp.o build/ImGUI/imgui_draw.cpp.o build/ImGUI/imgui_impl_opengl3.cpp.o build/ImGUI/imgui_tables.cpp.o build/ImGUI/imgui_widgets.cpp.o build/Mova/glUtil.cpp.o build/Mova/imguiImpl.cpp.o build/Mova/movaWin.cpp.o -D IMGUI_IMPL_OPENGL_ES2 -s ASYNCIFY -s WASM=1 -s MAX_WEBGL_VERSION=2 -s ALLOW_MEMORY_GROWTH=1 --bind --use-preload-plugins -I D:/Dev/C++/LIB/imgui -I D:/Dev/C++/LIB/Mova/src -o html/index.html --shell-file html/basic_template.html --preload-file Assets
+make: Leaving directory 'd:/Dev/C++/Games/Weather'
+ 
