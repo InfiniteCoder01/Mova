@@ -51,13 +51,6 @@ struct Image {
 };
 
 struct Window {
-#ifdef __aEMSCRIPTEN__
-  emscripten::val canvas, ctx;
-  EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext;
-  Window(emscripten::val canvas, emscripten::val ctx, EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext) : canvas(canvas), ctx(ctx), glContext(glContext) {}
-#elif defined(__WINDOWS__)
-// TODO: Windows Image
-#endif
 };
 
 struct Audio {
