@@ -8,8 +8,6 @@
 #ifdef __EMSCRIPTEN__
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
-#include <emscripten/val.h>
-#include <emscripten/html5.h>
 #elif defined(__WINDOWS__)
 #include <GL/gl.h>
 #include <windows.h>
@@ -31,35 +29,18 @@ struct Color {
   int alpha();
 };
 
-struct Image {
-  int width, height;
-
-#ifdef __EMSCRIPTEN__
-  union {
-    GLuint texture;
-    struct {
-      char* image;
-      emscripten::val JSimage;
-    };
-  };
-  Image(char* image, int width, int height, emscripten::val JSimage) : image(image), width(width), height(height), JSimage(JSimage) {}
-  Image(GLuint texture, int width, int height) : texture(texture), width(width), height(height) {}
-  ~Image() {}
-#elif defined(__WINDOWS__)
-// TODO: Windows Image
-#endif
+struct Window {
+  virtual ~Window() {}
 };
 
-struct Window {
+struct Image {
+  int width, height;
+  Image(int width, int height) : width(width), height(height) {}
+  virtual ~Image() {}
 };
 
 struct Audio {
-#ifdef __EMSCRIPTEN__
-  emscripten::val audio;
-  Audio(emscripten::val audio) : audio(audio) {}
-#elif defined(__WINDOWS__)
-// TODO: Windows audio
-#endif
+  virtual ~Audio() {}
 };
 
 enum MouseButton : uint8_t {
@@ -89,8 +70,8 @@ enum class Key {
 };
 // clang-format on
 
+using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
 using ScrollCallback = void (*)(float deltaX, float deltaY);
-using MouseCallback = void (*)(int x, int y, MouseButton button, bool down);
 using KeyCallback = void (*)(Key key, char character, bool state);
 
 /*                    VARS                    */
@@ -124,6 +105,7 @@ void popTransform(Window* window);
 void rotate(Window* window, int x, int y, float angle);
 
 void playAudio(Audio* audio);
+void stopAudio(Audio* audio);
 
 float deltaTime();
 

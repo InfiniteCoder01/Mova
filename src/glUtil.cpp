@@ -29,6 +29,9 @@ Shader* loadShader(const std::string& vert, const std::string& frag) {
   glAttachShader(program, fragmentShader);
   glLinkProgram(program);
 
+  glDetachShader(program, vertexShader);
+  glDetachShader(program, fragmentShader);
+
   glDeleteShader(vertexShader);
   glDeleteShader(fragmentShader);
 
@@ -45,7 +48,8 @@ Shader* loadShader(const std::string& vert, const std::string& frag) {
 
 void useShader(Shader* shader) { glUseProgram(shader->program); }
 
-void destroyShader(Shader* shader) {  // TODO: destroy shader
+void destroyShader(Shader* shader) {
+  glDeleteProgram(shader->program);
   delete shader;
 }
 

@@ -47,7 +47,7 @@ void ImGui_ImplMova_Init() {
   io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
   io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;
 
-  setMouseCallback([](int x, int y, MouseButton button, bool down) {
+  setMouseCallback([](Window* window, int x, int y, MouseButton button, bool down) {
     ImGuiIO& io = ImGui::GetIO();
     io.AddMousePosEvent(x, y);
     if (button == MOUSE_LEFT) {

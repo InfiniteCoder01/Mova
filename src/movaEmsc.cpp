@@ -22,7 +22,7 @@ static KeyCallback userKeyCallback;
 static Shader* defaultShader;
 
 /*                    DATA                    */
-struct __Window : Window {
+struct __Window : public Window {
   bool antialiasing, gl = false;
   int mouseX, mouseY;
   val canvas;
@@ -33,6 +33,26 @@ struct __Window : Window {
 
   __Window(val canvas, val ctx) : canvas(canvas), ctx(ctx) {}
   __Window(val canvas, EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext) : canvas(canvas), glContext(glContext), gl(true) {}
+  virtual ~__Window() noexcept {}
+};
+
+struct __Image : public Image {
+  union {
+    GLuint texture;
+    struct {
+      char* image;
+      emscripten::val JSimage;
+    };
+  };
+  __Image(char* image, int width, int height, emscripten::val JSimage) : image(image), Image(width, height), JSimage(JSimage) {}
+  __Image(GLuint texture, int width, int height) : texture(texture), Image(width, height) {}
+  virtual ~__Image() noexcept {}
+};
+
+struct __Audio : public Audio {
+  emscripten::val audio;
+  __Audio(emscripten::val audio) : audio(audio) {}
+  virtual ~__Audio() noexcept {}
 };
 
 // clang-format off
@@ -121,7 +141,7 @@ EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userDa
   mouseState = e->buttons;
   if (userMouseCallback) {
     MouseButton button = (MouseButton)(1 << e->button);
-    userMouseCallback(((__Window*)userData)->mouseX, ((__Window*)userData)->mouseY, button, isMouseButtonHeld(button));
+    userMouseCallback(((Window*)userData), ((__Window*)userData)->mouseX, ((__Window*)userData)->mouseY, button, isMouseButtonHeld(button));
   }
   return true;
 }
@@ -199,7 +219,7 @@ Image* loadImage(const std::string& filename, Window* window) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     free(image);
 
-    return new Image(texture, width, height);
+    return new __Image(texture, width, height);
   } else {
     val canvas = JSdocument.call<val>("getElementById", val("canvas"));
     val ctx = canvas.call<val>("getContext", val("2d"));
@@ -212,25 +232,28 @@ Image* loadImage(const std::string& filename, Window* window) {
     JSimage.set("src", canvas.call<val>("toDataURL"));
     canvas.set("width", w);
     canvas.set("height", h);
-    return new Image(image, width, height, JSimage);
+
+    return new __Image(image, width, height, JSimage);
   }
 }
 
 Audio* loadAudio(const std::string& filename) {
-  FILE* file = fopen(filename.c_str(), "rb");
-  assert(file && "Failed to load audio");
+  // val::global("wasmMemory").call<void>("grow", 1);
+  // FILE* file = fopen(filename.c_str(), "rb");
+  // assert(file && "Failed to load audio");
 
-  fseek(file, 0L, SEEK_END);
-  size_t length = ftell(file);
-  fseek(file, 0L, SEEK_SET);
+  // fseek(file, 0L, SEEK_END);
+  // size_t length = ftell(file);
+  // fseek(file, 0L, SEEK_SET);
 
-  unsigned char* buffer = new unsigned char[length];
-  fread(buffer, length, 1, file);
-  fclose(file);
+  // unsigned char* buffer = new unsigned char[length];
+  // fread(buffer, length, 1, file);
+  // fclose(file);
 
-  val audio = val::global("Audio").new_("data:audio/" + filename.substr(filename.find_last_of(".") + 1) + ";base64," + base64(buffer, length));
-  delete[] buffer;
-  return new Audio(audio);
+  // val audio = val::global("Audio").new_("data:audio/" + filename.substr(filename.find_last_of(".") + 1) + ";base64," + base64(buffer, length));
+  // delete[] buffer;
+  val audio = val::global("Audio").new_(filename);
+  return new __Audio(audio);
 }
 
 // Destroying things
@@ -240,10 +263,10 @@ void destroyWindow(Window* window) {
 }
 
 void destroyImage(Image* image) {
-  if (image->texture) {
-    glDeleteTextures(1, &image->texture);
+  if (((__Image*)image)->texture) {
+    glDeleteTextures(1, &((__Image*)image)->texture);
   } else {
-    free(image->image);
+    free(((__Image*)image)->image);
   }
   delete image;
 }
@@ -287,14 +310,14 @@ void drawImage(Window* window, Image* image, int x, int y, int w, int h, bool fl
   if (((__Window*)window)->gl) {
     setShaderBool(defaultShader, "textured", true);
     setShaderInt(defaultShader, "texture1", 0);
-    glDrawImage(image->texture, x, y, w, h, windowWidth(window), windowHeight(window), flip, srcX, srcY, srcW, srcH, image->width, image->height);
+    glDrawImage(((__Image*)image)->texture, x, y, w, h, windowWidth(window), windowHeight(window), flip, srcX, srcY, srcW, srcH, image->width, image->height);
   } else {
     if (flip) {
       ((__Window*)window)->ctx.call<void>("save");
       ((__Window*)window)->ctx.call<void>("translate", windowWidth(window), 0);
       ((__Window*)window)->ctx.call<void>("scale", -1, 1);
     }
-    ((__Window*)window)->ctx.call<void>("drawImage", image->JSimage, srcX, srcY, srcW, srcH, (flip ? windowWidth(window) - x : x), y, w * (flip ? -1 : 1), h);
+    ((__Window*)window)->ctx.call<void>("drawImage", ((__Image*)image)->JSimage, srcX, srcY, srcW, srcH, (flip ? windowWidth(window) - x : x), y, w * (flip ? -1 : 1), h);
     if (flip) ((__Window*)window)->ctx.call<void>("restore");
   }
 }
@@ -319,7 +342,15 @@ void rotate(Window* window, int x, int y, float angle) {
 }
 
 // Audio
-void playAudio(Audio* audio) { audio->audio.call<void>("play"); }
+void stopAudio(Audio* audio) {
+  ((__Audio*)audio)->audio.call<void>("pause");
+  ((__Audio*)audio)->audio.set("currentTime", 0);
+}
+
+void playAudio(Audio* audio) {
+  stopAudio(audio);
+  ((__Audio*)audio)->audio.call<void>("play");
+}
 
 // Utils
 float deltaTime() { return dt > 0 ? dt : 1 / 60.0; }
