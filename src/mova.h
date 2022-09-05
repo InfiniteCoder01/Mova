@@ -4,6 +4,8 @@
 #define __WINDOWS__
 #endif
 
+struct Shader;
+
 #include <string>
 #ifdef __EMSCRIPTEN__
 #include <GLES2/gl2.h>
@@ -34,8 +36,9 @@ struct Window {
 };
 
 struct Image {
+  GLuint texture;
   int width, height;
-  Image(int width, int height) : width(width), height(height) {}
+  Image(int width, int height, GLuint texture = 0) : width(width), height(height), texture(texture) {}
   virtual ~Image() {}
 };
 
@@ -47,6 +50,13 @@ enum MouseButton : uint8_t {
   MOUSE_LEFT = 1,
   MOUSE_RIGHT = 2,
   MOUSE_MIDDLE = 4,
+};
+
+enum Flip : uint8_t {
+  FLIP_NONE = 0,
+  FLIP_HORIZONTAL = 1,
+  FLIP_VERTICAL = 2,
+  FLIP_BOTH = 3,
 };
 
 // clang-format off
@@ -79,21 +89,27 @@ const Color black = Color(0), white = Color(255), grey = Color(150), red = Color
 
 /*                    FUNCTIONS                    */
 Window* createWindow(const std::string& title, bool gl = false);
+Image* createImage(int width, int height, Window* window);
 Image* loadImage(const std::string& filename, Window* window);
 Audio* loadAudio(const std::string& filename);
 void destroyWindow(Window* window);
 void destroyImage(Image* image);
 void destroyAudio(Audio* audio);
 
+void setContext(Window* window);
+
 int windowWidth(Window* window);
 int windowHeight(Window* window);
 
 void antialiasing(Window* window, bool enabled);
 
-void fillRect(Window* window, int x, int y, int w, int h, Color color);
 void clear(Window* window, Color color = black);
+void fillRect(Window* window, int x, int y, int w, int h, Color color);
+void drawImage(Window* window, Image* image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
-void drawImage(Window* window, Image* image, int x, int y, int w = -1, int h = -1, bool flip = false, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
+void clear(GLuint* framebuffer, Color color = black);
+void fillRect(GLuint* framebuffer, int x, int y, int w, int h, Color color);
+void drawImage(GLuint* framebuffer, Image* image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
 void setFont(Window* window, std::string font);
 void drawText(Window* window, int x, int y, std::string text, Color color = white);
@@ -135,3 +151,4 @@ void nextFrame();
 void setGLContext(Window* window);
 void loadDefaultShader();
 void useDefaultShader();
+Shader* getDefaultShader();

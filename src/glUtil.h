@@ -18,4 +18,4 @@ void setShaderFloat(Shader* shader, const std::string& name, float value);
 void setShaderColor(Shader* shader, const std::string& name, float r, float g, float b, float a);
 
 void glFillRect(int x, int y, int w, int h, float width, float height);
-void glDrawImage(GLuint texture, int x, int y, int w, int h, float width, float height, bool flip = false, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1, float fullW = -1, float fullH = -1);
+void glDrawImage(GLuint texture, int x, int y, int w, int h, float width, float height, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1, float fullW = -1, float fullH = -1);

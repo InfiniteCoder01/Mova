@@ -37,15 +37,10 @@ struct __Window : public Window {
 };
 
 struct __Image : public Image {
-  union {
-    GLuint texture;
-    struct {
-      char* image;
-      emscripten::val JSimage;
-    };
-  };
+  char* image;
+  emscripten::val JSimage;
   __Image(char* image, int width, int height, emscripten::val JSimage) : image(image), Image(width, height), JSimage(JSimage) {}
-  __Image(GLuint texture, int width, int height) : texture(texture), Image(width, height) {}
+  __Image(GLuint texture, int width, int height) : Image(width, height, texture) {}
   virtual ~__Image() noexcept {}
 };
 
@@ -203,6 +198,43 @@ Window* createWindow(const std::string& title, bool gl) {
   return window;
 }
 
+Image* createImage(int width, int height, Window* window) {
+  if (((__Window*)window)->gl) {
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return new __Image(texture, width, height);
+  } else {
+    char* image = (char*)malloc(width * height * 4);
+    for (int i = 0; i < width * height * 4; i += 4) {
+      image[i] = 0;
+      image[i + 1] = 0;
+      image[i + 2] = 0;
+      image[i + 3] = (char)255;
+    }
+    val canvas = JSdocument.call<val>("getElementById", val("canvas"));
+    val ctx = canvas.call<val>("getContext", val("2d"));
+    val imageData = val::global("ImageData").new_(val::global("Uint8ClampedArray").new_(emscripten::typed_memory_view<uint8_t>(width * height * 4, (uint8_t*)image)), width, height);
+    int w = canvas["width"].as<int>(), h = canvas["height"].as<int>();
+    canvas.set("width", width);
+    canvas.set("height", height);
+    ctx.call<void>("putImageData", imageData, 0, 0);
+    val JSimage = val::global("Image").new_();
+    JSimage.set("src", canvas.call<val>("toDataURL"));
+    canvas.set("width", w);
+    canvas.set("height", h);
+
+    return new __Image(image, width, height, JSimage);
+  }
+}
+
 Image* loadImage(const std::string& filename, Window* window) {
   int width, height;
   char* image = emscripten_get_preloaded_image_data(filename.c_str(), &width, &height);
@@ -217,6 +249,7 @@ Image* loadImage(const std::string& filename, Window* window) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
     free(image);
 
     return new __Image(texture, width, height);
@@ -302,7 +335,7 @@ void clear(Window* window, Color color) {
   }
 }
 
-void drawImage(Window* window, Image* image, int x, int y, int w, int h, bool flip, int srcX, int srcY, int srcW, int srcH) {
+void drawImage(Window* window, Image* image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
   if (w == -1) w = image->width;
   if (h == -1) h = image->height;
   if (srcW == -1) srcW = image->width;
@@ -315,30 +348,73 @@ void drawImage(Window* window, Image* image, int x, int y, int w, int h, bool fl
     if (flip) {
       ((__Window*)window)->ctx.call<void>("save");
       ((__Window*)window)->ctx.call<void>("translate", windowWidth(window), 0);
-      ((__Window*)window)->ctx.call<void>("scale", -1, 1);
+      ((__Window*)window)->ctx.call<void>("scale", 1 * (flip & FLIP_HORIZONTAL ? -1 : 1), (flip & FLIP_VERTICAL ? -1 : 1));
     }
-    ((__Window*)window)->ctx.call<void>("drawImage", ((__Image*)image)->JSimage, srcX, srcY, srcW, srcH, (flip ? windowWidth(window) - x : x), y, w * (flip ? -1 : 1), h);
+    ((__Window*)window)->ctx.call<void>("drawImage", ((__Image*)image)->JSimage, srcX, srcY, srcW, srcH, (flip & FLIP_HORIZONTAL ? windowWidth(window) - x : x), (flip & FLIP_VERTICAL ? windowHeight(window) - y : y), w * (flip & FLIP_HORIZONTAL ? -1 : 1), h * (flip & FLIP_VERTICAL ? -1 : 1));
     if (flip) ((__Window*)window)->ctx.call<void>("restore");
   }
 }
 
-void setFont(Window* window, std::string font) { ((__Window*)window)->ctx.set("font", font); }
-
-void drawText(Window* window, int x, int y, std::string text, Color color) {
-  ((__Window*)window)->ctx.set("fillStyle", color.color);
-  ((__Window*)window)->ctx.call<void>("fillText", text, x, y);
+void setFont(Window* window, std::string font) {
+  if (((__Window*)window)->gl) {
+    // TODO: OpenGL text
+  } else {
+    ((__Window*)window)->ctx.set("font", font);
+  }
 }
 
-int textWidth(Window* window, std::string text) { return ((__Window*)window)->ctx.call<val>("measureText", text)["width"].as<int>(); }
-int textHeight(Window* window, std::string text) { return ((__Window*)window)->ctx.call<val>("measureText", text)["height"].as<int>(); }
+void drawText(Window* window, int x, int y, std::string text, Color color) {
+  if (((__Window*)window)->gl) {
+    // TODO: OpenGL text
+  } else {
+    ((__Window*)window)->ctx.set("fillStyle", color.color);
+    ((__Window*)window)->ctx.call<void>("fillText", text, x, y);
+  }
+}
+
+int textWidth(Window* window, std::string text) {
+  if (((__Window*)window)->gl) {
+    // TODO: OpenGL text
+    return 0;
+  } else {
+    return ((__Window*)window)->ctx.call<val>("measureText", text)["width"].as<int>();
+  }
+}
+
+int textHeight(Window* window, std::string text) {
+  if (((__Window*)window)->gl) {
+    // TODO: OpenGL text
+    return 0;
+  } else {
+    return ((__Window*)window)->ctx.call<val>("measureText", text)["height"].as<int>();
+  }
+}
 
 // Transform
-void pushTransform(Window* window) { ((__Window*)window)->ctx.call<void>("save"); }
-void popTransform(Window* window) { ((__Window*)window)->ctx.call<void>("restore"); }
+void pushTransform(Window* window) {
+  if (((__Window*)window)->gl) {
+    // TODO: matrix stack
+  } else {
+    ((__Window*)window)->ctx.call<void>("save");
+  }
+}
+
+void popTransform(Window* window) {
+  if (((__Window*)window)->gl) {
+    // TODO: matrix stack
+  } else {
+    ((__Window*)window)->ctx.call<void>("restore");
+  }
+}
+
 void rotate(Window* window, int x, int y, float angle) {
-  ((__Window*)window)->ctx.call<void>("translate", x, y);
-  ((__Window*)window)->ctx.call<void>("rotate", angle);
-  ((__Window*)window)->ctx.call<void>("translate", -x, -y);
+  if (((__Window*)window)->gl) {
+    // TODO: matrices
+  } else {
+    ((__Window*)window)->ctx.call<void>("translate", x, y);
+    ((__Window*)window)->ctx.call<void>("rotate", angle);
+    ((__Window*)window)->ctx.call<void>("translate", -x, -y);
+  }
 }
 
 // Audio
@@ -437,4 +513,5 @@ const std::string fragmentShader = R"(
 void setGLContext(Window* window) { emscripten_webgl_make_context_current(((__Window*)window)->glContext); }
 void loadDefaultShader() { defaultShader = loadShader(vertexShader, fragmentShader); }
 void useDefaultShader() { useShader(defaultShader); }
+Shader* getDefaultShader() { return defaultShader; }
 #endif

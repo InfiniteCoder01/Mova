@@ -87,7 +87,7 @@ void glFillRect(int x, int y, int w, int h, float width, float height) {
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
-void glDrawImage(GLuint texture, int x, int y, int w, int h, float width, float height, bool flip, int srcX, int srcY, int srcW, int srcH, float fullW, float fullH) {
+void glDrawImage(GLuint texture, int x, int y, int w, int h, float width, float height, Flip flip, int srcX, int srcY, int srcW, int srcH, float fullW, float fullH) {
   static GLfloat vertices[12] = {0};
   static GLfloat texCoords[8] = {0};
   static GLuint VBO = 0, texCoordVBO = 0;
@@ -118,14 +118,14 @@ void glDrawImage(GLuint texture, int x, int y, int w, int h, float width, float 
   vertices[9] = x / width * 2 - 1;
   vertices[10] = (y + h) / height * -2 + 1;
 
-  texCoords[0] = flip ? (srcX + srcW) / fullW : srcX / fullW;
-  texCoords[1] = srcY / fullH;
-  texCoords[2] = flip ? srcX / fullW : (srcX + srcW) / fullW;
-  texCoords[3] = srcY / fullH;
-  texCoords[4] = flip ? srcX / fullW : (srcX + srcW) / fullW;
-  texCoords[5] = (srcY + srcH) / fullH;
-  texCoords[6] = flip ? (srcX + srcW) / fullW : srcX / fullW;
-  texCoords[7] = (srcY + srcH) / fullH;
+  texCoords[0] = flip & FLIP_HORIZONTAL ? (srcX + srcW) / fullW : srcX / fullW;
+  texCoords[1] = flip & FLIP_VERTICAL ? (srcY + srcH) / fullH : srcY / fullH;
+  texCoords[2] = flip & FLIP_HORIZONTAL ? srcX / fullW : (srcX + srcW) / fullW;
+  texCoords[3] = texCoords[1];
+  texCoords[4] = texCoords[2];
+  texCoords[5] = flip & FLIP_VERTICAL ? srcY / fullH : (srcY + srcH) / fullH;
+  texCoords[6] = texCoords[0];
+  texCoords[7] = texCoords[5];
 
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
