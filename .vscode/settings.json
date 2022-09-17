@@ -64,6 +64,8 @@
         "ostream": "cpp",
         "streambuf": "cpp",
         "system_error": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "fstream": "cpp",
+        "iomanip": "cpp"
     }
 }

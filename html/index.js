@@ -21,7 +21,203 @@ var Module = typeof Module != 'undefined' ? Module : {};
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// {{PRE_JSES}}
+
+  if (!Module.expectedDataFileDownloads) {
+    Module.expectedDataFileDownloads = 0;
+  }
+
+  Module.expectedDataFileDownloads++;
+  (function() {
+    // When running as a pthread, FS operations are proxied to the main thread, so we don't need to
+    // fetch the .data bundle on the worker
+    if (Module['ENVIRONMENT_IS_PTHREAD']) return;
+    var loadPackage = function(metadata) {
+
+      var PACKAGE_PATH = '';
+      if (typeof window === 'object') {
+        PACKAGE_PATH = window['encodeURIComponent'](window.location.pathname.toString().substring(0, window.location.pathname.toString().lastIndexOf('/')) + '/');
+      } else if (typeof process === 'undefined' && typeof location !== 'undefined') {
+        // web worker
+        PACKAGE_PATH = encodeURIComponent(location.pathname.toString().substring(0, location.pathname.toString().lastIndexOf('/')) + '/');
+      }
+      var PACKAGE_NAME = 'html/index.data';
+      var REMOTE_PACKAGE_BASE = 'index.data';
+      if (typeof Module['locateFilePackage'] === 'function' && !Module['locateFile']) {
+        Module['locateFile'] = Module['locateFilePackage'];
+        err('warning: you defined Module.locateFilePackage, that has been renamed to Module.locateFile (using your locateFilePackage for now)');
+      }
+      var REMOTE_PACKAGE_NAME = Module['locateFile'] ? Module['locateFile'](REMOTE_PACKAGE_BASE, '') : REMOTE_PACKAGE_BASE;
+var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
+
+      function fetchRemotePackage(packageName, packageSize, callback, errback) {
+        if (typeof process === 'object' && typeof process.versions === 'object' && typeof process.versions.node === 'string') {
+          require('fs').readFile(packageName, function(err, contents) {
+            if (err) {
+              errback(err);
+            } else {
+              callback(contents.buffer);
+            }
+          });
+          return;
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', packageName, true);
+        xhr.responseType = 'arraybuffer';
+        xhr.onprogress = function(event) {
+          var url = packageName;
+          var size = packageSize;
+          if (event.total) size = event.total;
+          if (event.loaded) {
+            if (!xhr.addedTotal) {
+              xhr.addedTotal = true;
+              if (!Module.dataFileDownloads) Module.dataFileDownloads = {};
+              Module.dataFileDownloads[url] = {
+                loaded: event.loaded,
+                total: size
+              };
+            } else {
+              Module.dataFileDownloads[url].loaded = event.loaded;
+            }
+            var total = 0;
+            var loaded = 0;
+            var num = 0;
+            for (var download in Module.dataFileDownloads) {
+            var data = Module.dataFileDownloads[download];
+              total += data.total;
+              loaded += data.loaded;
+              num++;
+            }
+            total = Math.ceil(total * Module.expectedDataFileDownloads/num);
+            if (Module['setStatus']) Module['setStatus']('Downloading data... (' + loaded + '/' + total + ')');
+          } else if (!Module.dataFileDownloads) {
+            if (Module['setStatus']) Module['setStatus']('Downloading data...');
+          }
+        };
+        xhr.onerror = function(event) {
+          throw new Error("NetworkError for: " + packageName);
+        }
+        xhr.onload = function(event) {
+          if (xhr.status == 200 || xhr.status == 304 || xhr.status == 206 || (xhr.status == 0 && xhr.response)) { // file URLs can return 0
+            var packageData = xhr.response;
+            callback(packageData);
+          } else {
+            throw new Error(xhr.statusText + " : " + xhr.responseURL);
+          }
+        };
+        xhr.send(null);
+      };
+
+      function handleError(error) {
+        console.error('package error:', error);
+      };
+
+      var fetchedCallback = null;
+      var fetched = Module['getPreloadedPackage'] ? Module['getPreloadedPackage'](REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE) : null;
+
+      if (!fetched) fetchRemotePackage(REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE, function(data) {
+        if (fetchedCallback) {
+          fetchedCallback(data);
+          fetchedCallback = null;
+        } else {
+          fetched = data;
+        }
+      }, handleError);
+
+    function runWithFS() {
+
+      function assert(check, msg) {
+        if (!check) throw msg + new Error().stack;
+      }
+
+      /** @constructor */
+      function DataRequest(start, end, audio) {
+        this.start = start;
+        this.end = end;
+        this.audio = audio;
+      }
+      DataRequest.prototype = {
+        requests: {},
+        open: function(mode, name) {
+          this.name = name;
+          this.requests[name] = this;
+          Module['addRunDependency']('fp ' + this.name);
+        },
+        send: function() {},
+        onload: function() {
+          var byteArray = this.byteArray.subarray(this.start, this.end);
+          this.finish(byteArray);
+        },
+        finish: function(byteArray) {
+          var that = this;
+          
+          Module['FS_createPreloadedFile'](this.name, null, byteArray, true, true, function() {
+            Module['removeRunDependency']('fp ' + that.name);
+          }, function() {
+            if (that.audio) {
+              Module['removeRunDependency']('fp ' + that.name); // workaround for chromium bug 124926 (still no audio with this, but at least we don't hang)
+            } else {
+              err('Preloading file ' + that.name + ' failed');
+            }
+          }, false, true); // canOwn this data in the filesystem, it is a slide into the heap that will never change
+
+          this.requests[this.name] = null;
+        }
+      };
+
+      var files = metadata['files'];
+      for (var i = 0; i < files.length; ++i) {
+        new DataRequest(files[i]['start'], files[i]['end'], files[i]['audio'] || 0).open('GET', files[i]['filename']);
+      }
+
+      function processPackageData(arrayBuffer) {
+        assert(arrayBuffer, 'Loading data file failed.');
+        assert(arrayBuffer instanceof ArrayBuffer, 'bad input to processPackageData');
+        var byteArray = new Uint8Array(arrayBuffer);
+        var curr;
+        // Reuse the bytearray from the XHR as the source for file reads.
+          DataRequest.prototype.byteArray = byteArray;
+          var files = metadata['files'];
+          for (var i = 0; i < files.length; ++i) {
+            DataRequest.prototype.requests[files[i].filename].onload();
+          }          Module['removeRunDependency']('datafile_html/index.data');
+
+      };
+      Module['addRunDependency']('datafile_html/index.data');
+
+      if (!Module.preloadResults) Module.preloadResults = {};
+
+      Module.preloadResults[PACKAGE_NAME] = {fromCache: false};
+      if (fetched) {
+        processPackageData(fetched);
+        fetched = null;
+      } else {
+        fetchedCallback = processPackageData;
+      }
+
+    }
+    if (Module['calledRun']) {
+      runWithFS();
+    } else {
+      if (!Module['preRun']) Module['preRun'] = [];
+      Module["preRun"].push(runWithFS); // FS is not initialized yet, wait for it
+    }
+
+    }
+    loadPackage({"files": [{"filename": "/test.png", "start": 0, "end": 15753}], "remote_package_size": 15753});
+
+  })();
+
+
+    // All the pre-js content up to here must remain later on, we need to run
+    // it.
+    if (Module['ENVIRONMENT_IS_PTHREAD']) Module['preRun'] = [];
+    var necessaryPreJSTasks = Module['preRun'].slice();
+  
+    if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
+    necessaryPreJSTasks.forEach(function(task) {
+      if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
+    });
+  
 
 // Sometimes an existing Module object exists with properties
 // meant to overwrite the default module functionality. Here
@@ -1165,7 +1361,7 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  7256: () => { addOnPostRun(function() { if (Module.canvas) Module.canvas.focus(); }); }
+  
 };
 
 
@@ -4368,10 +4564,6 @@ var ASM_CONSTS = {
       HEAP8.set(array, buffer);
     }
 
-  function ___assert_fail(condition, filename, line, func) {
-      abort('Assertion failed: ' + UTF8ToString(condition) + ', at: ' + [filename ? UTF8ToString(filename) : 'unknown filename', line, func ? UTF8ToString(func) : 'unknown function']);
-    }
-
   function ___cxa_allocate_exception(size) {
       // Thrown object is prepended by exception metadata block
       return _malloc(size + 24) + 24;
@@ -5191,252 +5383,10 @@ var ASM_CONSTS = {
       });
     }
 
-  function __emscripten_date_now() {
-      return Date.now();
-    }
-
-  var nowIsMonotonic = true;;
-  function __emscripten_get_now_is_monotonic() {
-      return nowIsMonotonic;
-    }
-
-  function getTypeName(type) {
-      var ptr = ___getTypeName(type);
-      var rv = readLatin1String(ptr);
-      _free(ptr);
-      return rv;
-    }
-  function requireRegisteredType(rawType, humanName) {
-      var impl = registeredTypes[rawType];
-      if (undefined === impl) {
-          throwBindingError(humanName + " has unknown type " + getTypeName(rawType));
-      }
-      return impl;
-    }
-  function __emval_as(handle, returnType, destructorsRef) {
-      handle = Emval.toValue(handle);
-      returnType = requireRegisteredType(returnType, 'emval::as');
-      var destructors = [];
-      var rd = Emval.toHandle(destructors);
-      HEAPU32[((destructorsRef)>>2)] = rd;
-      return returnType['toWireType'](destructors, handle);
-    }
-
-  function emval_allocateDestructors(destructorsRef) {
-      var destructors = [];
-      HEAPU32[((destructorsRef)>>2)] = Emval.toHandle(destructors);
-      return destructors;
-    }
-  
-  var emval_symbols = {};
-  function getStringOrSymbol(address) {
-      var symbol = emval_symbols[address];
-      if (symbol === undefined) {
-        return readLatin1String(address);
-      }
-      return symbol;
-    }
-  
-  var emval_methodCallers = [];
-  function __emval_call_method(caller, handle, methodName, destructorsRef, args) {
-      caller = emval_methodCallers[caller];
-      handle = Emval.toValue(handle);
-      methodName = getStringOrSymbol(methodName);
-      return caller(handle, methodName, emval_allocateDestructors(destructorsRef), args);
-    }
-
-  function __emval_call_void_method(caller, handle, methodName, args) {
-      caller = emval_methodCallers[caller];
-      handle = Emval.toValue(handle);
-      methodName = getStringOrSymbol(methodName);
-      caller(handle, methodName, null, args);
-    }
-
-
-  function emval_get_global() {
-      if (typeof globalThis == 'object') {
-        return globalThis;
-      }
-      return (function(){
-        return Function;
-      })()('return this')();
-    }
-  function __emval_get_global(name) {
-      if (name===0) {
-        return Emval.toHandle(emval_get_global());
-      } else {
-        name = getStringOrSymbol(name);
-        return Emval.toHandle(emval_get_global()[name]);
-      }
-    }
-
-  function emval_addMethodCaller(caller) {
-      var id = emval_methodCallers.length;
-      emval_methodCallers.push(caller);
-      return id;
-    }
-  
-  function emval_lookupTypes(argCount, argTypes) {
-      var a = new Array(argCount);
-      for (var i = 0; i < argCount; ++i) {
-        a[i] = requireRegisteredType(HEAPU32[(((argTypes)+(i * POINTER_SIZE))>>2)],
-                                     "parameter " + i);
-      }
-      return a;
-    }
-  
-  function new_(constructor, argumentList) {
-      if (!(constructor instanceof Function)) {
-        throw new TypeError('new_ called with constructor type ' + typeof(constructor) + " which is not a function");
-      }
-      /*
-       * Previously, the following line was just:
-       *   function dummy() {};
-       * Unfortunately, Chrome was preserving 'dummy' as the object's name, even
-       * though at creation, the 'dummy' has the correct constructor name.  Thus,
-       * objects created with IMVU.new would show up in the debugger as 'dummy',
-       * which isn't very helpful.  Using IMVU.createNamedFunction addresses the
-       * issue.  Doublely-unfortunately, there's no way to write a test for this
-       * behavior.  -NRD 2013.02.22
-       */
-      var dummy = createNamedFunction(constructor.name || 'unknownFunctionName', function(){});
-      dummy.prototype = constructor.prototype;
-      var obj = new dummy;
-  
-      var r = constructor.apply(obj, argumentList);
-      return (r instanceof Object) ? r : obj;
-    }
-  
-  var emval_registeredMethods = [];
-  function __emval_get_method_caller(argCount, argTypes) {
-      var types = emval_lookupTypes(argCount, argTypes);
-      var retType = types[0];
-      var signatureName = retType.name + "_$" + types.slice(1).map(function (t) { return t.name; }).join("_") + "$";
-      var returnId = emval_registeredMethods[signatureName];
-      if (returnId !== undefined) {
-        return returnId;
-      }
-  
-      var params = ["retType"];
-      var args = [retType];
-  
-      var argsList = ""; // 'arg0, arg1, arg2, ... , argN'
-      for (var i = 0; i < argCount - 1; ++i) {
-        argsList += (i !== 0 ? ", " : "") + "arg" + i;
-        params.push("argType" + i);
-        args.push(types[1 + i]);
-      }
-  
-      var functionName = makeLegalFunctionName("methodCaller_" + signatureName);
-      var functionBody =
-          "return function " + functionName + "(handle, name, destructors, args) {\n";
-  
-      var offset = 0;
-      for (var i = 0; i < argCount - 1; ++i) {
-          functionBody +=
-          "    var arg" + i + " = argType" + i + ".readValueFromPointer(args" + (offset ? ("+"+offset) : "") + ");\n";
-          offset += types[i + 1]['argPackAdvance'];
-      }
-      functionBody +=
-          "    var rv = handle[name](" + argsList + ");\n";
-      for (var i = 0; i < argCount - 1; ++i) {
-          if (types[i + 1]['deleteObject']) {
-              functionBody +=
-              "    argType" + i + ".deleteObject(arg" + i + ");\n";
-          }
-      }
-      if (!retType.isVoid) {
-          functionBody +=
-          "    return retType.toWireType(destructors, rv);\n";
-      }
-      functionBody +=
-          "};\n";
-  
-      params.push(functionBody);
-      var invokerFunction = new_(Function, params).apply(null, args);
-      returnId = emval_addMethodCaller(invokerFunction);
-      emval_registeredMethods[signatureName] = returnId;
-      return returnId;
-    }
-
-  function __emval_get_property(handle, key) {
-      handle = Emval.toValue(handle);
-      key = Emval.toValue(key);
-      return Emval.toHandle(handle[key]);
-    }
-
-  function __emval_incref(handle) {
-      if (handle > 4) {
-        emval_handle_array[handle].refcount += 1;
-      }
-    }
-
-  function __emval_new_cstring(v) {
-      return Emval.toHandle(getStringOrSymbol(v));
-    }
-
-  function runDestructors(destructors) {
-      while (destructors.length) {
-        var ptr = destructors.pop();
-        var del = destructors.pop();
-        del(ptr);
-      }
-    }
-  function __emval_run_destructors(handle) {
-      var destructors = Emval.toValue(handle);
-      runDestructors(destructors);
-      __emval_decref(handle);
-    }
-
-  function __emval_set_property(handle, key, value) {
-      handle = Emval.toValue(handle);
-      key = Emval.toValue(key);
-      value = Emval.toValue(value);
-      handle[key] = value;
-    }
-
-  function __emval_take_value(type, arg) {
-      type = requireRegisteredType(type, '_emval_take_value');
-      var v = type['readValueFromPointer'](arg);
-      return Emval.toHandle(v);
-    }
 
   function _abort() {
       abort('native code called abort()');
     }
-
-  var readAsmConstArgsArray = [];
-  function readAsmConstArgs(sigPtr, buf) {
-      // Nobody should have mutated _readAsmConstArgsArray underneath us to be something else than an array.
-      assert(Array.isArray(readAsmConstArgsArray));
-      // The input buffer is allocated on the stack, so it must be stack-aligned.
-      assert(buf % 16 == 0);
-      readAsmConstArgsArray.length = 0;
-      var ch;
-      // Most arguments are i32s, so shift the buffer pointer so it is a plain
-      // index into HEAP32.
-      buf >>= 2;
-      while (ch = HEAPU8[sigPtr++]) {
-        var chr = String.fromCharCode(ch);
-        var validChars = ['d', 'f', 'i'];
-        assert(validChars.includes(chr), 'Invalid character ' + ch + '("' + chr + '") in readAsmConstArgs! Use only [' + validChars + '], and do not specify "v" for void return argument.');
-        // Floats are always passed as doubles, and doubles and int64s take up 8
-        // bytes (two 32-bit slots) in memory, align reads to these:
-        buf += (ch != 105/*i*/) & buf;
-        readAsmConstArgsArray.push(
-          ch == 105/*i*/ ? HEAP32[buf] :
-         HEAPF64[buf++ >> 1]
-        );
-        ++buf;
-      }
-      return readAsmConstArgsArray;
-    }
-  function _emscripten_asm_const_int(code, sigPtr, argbuf) {
-      var args = readAsmConstArgs(sigPtr, argbuf);
-      if (!ASM_CONSTS.hasOwnProperty(code)) abort('No EM_ASM constant found at address ' + code);
-      return ASM_CONSTS[code].apply(null, args);
-    }
-
 
   function _emscripten_memcpy_big(dest, src, num) {
       HEAPU8.copyWithin(dest, src, src + num);
@@ -5516,525 +5466,6 @@ var ASM_CONSTS = {
       return false;
     }
 
-  var JSEvents = {inEventHandler:0,removeAllEventListeners:function() {
-        for (var i = JSEvents.eventHandlers.length-1; i >= 0; --i) {
-          JSEvents._removeHandler(i);
-        }
-        JSEvents.eventHandlers = [];
-        JSEvents.deferredCalls = [];
-      },registerRemoveEventListeners:function() {
-        if (!JSEvents.removeEventListenersRegistered) {
-          __ATEXIT__.push(JSEvents.removeAllEventListeners);
-          JSEvents.removeEventListenersRegistered = true;
-        }
-      },deferredCalls:[],deferCall:function(targetFunction, precedence, argsList) {
-        function arraysHaveEqualContent(arrA, arrB) {
-          if (arrA.length != arrB.length) return false;
-  
-          for (var i in arrA) {
-            if (arrA[i] != arrB[i]) return false;
-          }
-          return true;
-        }
-        // Test if the given call was already queued, and if so, don't add it again.
-        for (var i in JSEvents.deferredCalls) {
-          var call = JSEvents.deferredCalls[i];
-          if (call.targetFunction == targetFunction && arraysHaveEqualContent(call.argsList, argsList)) {
-            return;
-          }
-        }
-        JSEvents.deferredCalls.push({
-          targetFunction: targetFunction,
-          precedence: precedence,
-          argsList: argsList
-        });
-  
-        JSEvents.deferredCalls.sort(function(x,y) { return x.precedence < y.precedence; });
-      },removeDeferredCalls:function(targetFunction) {
-        for (var i = 0; i < JSEvents.deferredCalls.length; ++i) {
-          if (JSEvents.deferredCalls[i].targetFunction == targetFunction) {
-            JSEvents.deferredCalls.splice(i, 1);
-            --i;
-          }
-        }
-      },canPerformEventHandlerRequests:function() {
-        return JSEvents.inEventHandler && JSEvents.currentEventHandler.allowsDeferredCalls;
-      },runDeferredCalls:function() {
-        if (!JSEvents.canPerformEventHandlerRequests()) {
-          return;
-        }
-        for (var i = 0; i < JSEvents.deferredCalls.length; ++i) {
-          var call = JSEvents.deferredCalls[i];
-          JSEvents.deferredCalls.splice(i, 1);
-          --i;
-          call.targetFunction.apply(null, call.argsList);
-        }
-      },eventHandlers:[],removeAllHandlersOnTarget:function(target, eventTypeString) {
-        for (var i = 0; i < JSEvents.eventHandlers.length; ++i) {
-          if (JSEvents.eventHandlers[i].target == target && 
-            (!eventTypeString || eventTypeString == JSEvents.eventHandlers[i].eventTypeString)) {
-             JSEvents._removeHandler(i--);
-           }
-        }
-      },_removeHandler:function(i) {
-        var h = JSEvents.eventHandlers[i];
-        h.target.removeEventListener(h.eventTypeString, h.eventListenerFunc, h.useCapture);
-        JSEvents.eventHandlers.splice(i, 1);
-      },registerOrRemoveHandler:function(eventHandler) {
-        var jsEventHandler = function jsEventHandler(event) {
-          // Increment nesting count for the event handler.
-          ++JSEvents.inEventHandler;
-          JSEvents.currentEventHandler = eventHandler;
-          // Process any old deferred calls the user has placed.
-          JSEvents.runDeferredCalls();
-          // Process the actual event, calls back to user C code handler.
-          eventHandler.handlerFunc(event);
-          // Process any new deferred calls that were placed right now from this event handler.
-          JSEvents.runDeferredCalls();
-          // Out of event handler - restore nesting count.
-          --JSEvents.inEventHandler;
-        };
-        
-        if (eventHandler.callbackfunc) {
-          eventHandler.eventListenerFunc = jsEventHandler;
-          eventHandler.target.addEventListener(eventHandler.eventTypeString, jsEventHandler, eventHandler.useCapture);
-          JSEvents.eventHandlers.push(eventHandler);
-          JSEvents.registerRemoveEventListeners();
-        } else {
-          for (var i = 0; i < JSEvents.eventHandlers.length; ++i) {
-            if (JSEvents.eventHandlers[i].target == eventHandler.target
-             && JSEvents.eventHandlers[i].eventTypeString == eventHandler.eventTypeString) {
-               JSEvents._removeHandler(i--);
-             }
-          }
-        }
-      },getNodeNameForTarget:function(target) {
-        if (!target) return '';
-        if (target == window) return '#window';
-        if (target == screen) return '#screen';
-        return (target && target.nodeName) ? target.nodeName : '';
-      },fullscreenEnabled:function() {
-        return document.fullscreenEnabled
-        // Safari 13.0.3 on macOS Catalina 10.15.1 still ships with prefixed webkitFullscreenEnabled.
-        // TODO: If Safari at some point ships with unprefixed version, update the version check above.
-        || document.webkitFullscreenEnabled
-         ;
-      }};
-  
-  var specialHTMLTargets = [0, typeof document != 'undefined' ? document : 0, typeof window != 'undefined' ? window : 0];
-  function getBoundingClientRect(e) {
-      return specialHTMLTargets.indexOf(e) < 0 ? e.getBoundingClientRect() : {'left':0,'top':0};
-    }
-  function fillMouseEventData(eventStruct, e, target) {
-      assert(eventStruct % 4 == 0);
-      HEAPF64[((eventStruct)>>3)] = e.timeStamp;
-      var idx = eventStruct >> 2;
-      HEAP32[idx + 2] = e.screenX;
-      HEAP32[idx + 3] = e.screenY;
-      HEAP32[idx + 4] = e.clientX;
-      HEAP32[idx + 5] = e.clientY;
-      HEAP32[idx + 6] = e.ctrlKey;
-      HEAP32[idx + 7] = e.shiftKey;
-      HEAP32[idx + 8] = e.altKey;
-      HEAP32[idx + 9] = e.metaKey;
-      HEAP16[idx*2 + 20] = e.button;
-      HEAP16[idx*2 + 21] = e.buttons;
-  
-      HEAP32[idx + 11] = e["movementX"]
-        ;
-  
-      HEAP32[idx + 12] = e["movementY"]
-        ;
-  
-      var rect = getBoundingClientRect(target);
-      HEAP32[idx + 13] = e.clientX - rect.left;
-      HEAP32[idx + 14] = e.clientY - rect.top;
-  
-    }
-  
-  function maybeCStringToJsString(cString) {
-      // "cString > 2" checks if the input is a number, and isn't of the special
-      // values we accept here, EMSCRIPTEN_EVENT_TARGET_* (which map to 0, 1, 2).
-      // In other words, if cString > 2 then it's a pointer to a valid place in
-      // memory, and points to a C string.
-      return cString > 2 ? UTF8ToString(cString) : cString;
-    }
-  function findEventTarget(target) {
-      target = maybeCStringToJsString(target);
-      var domElement = specialHTMLTargets[target] || (typeof document != 'undefined' ? document.querySelector(target) : undefined);
-      return domElement;
-    }
-  function registerMouseEventCallback(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
-      if (!JSEvents.mouseEvent) JSEvents.mouseEvent = _malloc( 72 );
-      target = findEventTarget(target);
-  
-      var mouseEventHandlerFunc = function(ev) {
-        var e = ev || event;
-  
-        // TODO: Make this access thread safe, or this could update live while app is reading it.
-        fillMouseEventData(JSEvents.mouseEvent, e, target);
-  
-        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, JSEvents.mouseEvent, userData)) e.preventDefault();
-      };
-  
-      var eventHandler = {
-        target: target,
-        allowsDeferredCalls: eventTypeString != 'mousemove' && eventTypeString != 'mouseenter' && eventTypeString != 'mouseleave', // Mouse move events do not allow fullscreen/pointer lock requests to be handled in them!
-        eventTypeString: eventTypeString,
-        callbackfunc: callbackfunc,
-        handlerFunc: mouseEventHandlerFunc,
-        useCapture: useCapture
-      };
-      JSEvents.registerOrRemoveHandler(eventHandler);
-    }
-  function _emscripten_set_click_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 4, "click", targetThread);
-      return 0;
-    }
-
-  function _emscripten_set_dblclick_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 7, "dblclick", targetThread);
-      return 0;
-    }
-
-  function registerKeyEventCallback(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
-      if (!JSEvents.keyEvent) JSEvents.keyEvent = _malloc( 176 );
-  
-      var keyEventHandlerFunc = function(e) {
-        assert(e);
-  
-        var keyEventData = JSEvents.keyEvent;
-        HEAPF64[((keyEventData)>>3)] = e.timeStamp;
-  
-        var idx = keyEventData >> 2;
-  
-        HEAP32[idx + 2] = e.location;
-        HEAP32[idx + 3] = e.ctrlKey;
-        HEAP32[idx + 4] = e.shiftKey;
-        HEAP32[idx + 5] = e.altKey;
-        HEAP32[idx + 6] = e.metaKey;
-        HEAP32[idx + 7] = e.repeat;
-        HEAP32[idx + 8] = e.charCode;
-        HEAP32[idx + 9] = e.keyCode;
-        HEAP32[idx + 10] = e.which;
-        stringToUTF8(e.key || '', keyEventData + 44, 32);
-        stringToUTF8(e.code || '', keyEventData + 76, 32);
-        stringToUTF8(e.char || '', keyEventData + 108, 32);
-        stringToUTF8(e.locale || '', keyEventData + 140, 32);
-  
-        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, keyEventData, userData)) e.preventDefault();
-      };
-  
-      var eventHandler = {
-        target: findEventTarget(target),
-        allowsDeferredCalls: true,
-        eventTypeString: eventTypeString,
-        callbackfunc: callbackfunc,
-        handlerFunc: keyEventHandlerFunc,
-        useCapture: useCapture
-      };
-      JSEvents.registerOrRemoveHandler(eventHandler);
-    }
-  function _emscripten_set_keydown_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      registerKeyEventCallback(target, userData, useCapture, callbackfunc, 2, "keydown", targetThread);
-      return 0;
-    }
-
-  function _emscripten_set_keyup_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      registerKeyEventCallback(target, userData, useCapture, callbackfunc, 3, "keyup", targetThread);
-      return 0;
-    }
-
-  function _emscripten_set_mousedown_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 5, "mousedown", targetThread);
-      return 0;
-    }
-
-  function _emscripten_set_mousemove_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 8, "mousemove", targetThread);
-      return 0;
-    }
-
-  function _emscripten_set_mouseup_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 6, "mouseup", targetThread);
-      return 0;
-    }
-
-  function registerWheelEventCallback(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
-      if (!JSEvents.wheelEvent) JSEvents.wheelEvent = _malloc( 104 );
-  
-      // The DOM Level 3 events spec event 'wheel'
-      var wheelHandlerFunc = function(ev) {
-        var e = ev || event;
-        var wheelEvent = JSEvents.wheelEvent;
-        fillMouseEventData(wheelEvent, e, target);
-        HEAPF64[(((wheelEvent)+(72))>>3)] = e["deltaX"];
-        HEAPF64[(((wheelEvent)+(80))>>3)] = e["deltaY"];
-        HEAPF64[(((wheelEvent)+(88))>>3)] = e["deltaZ"];
-        HEAP32[(((wheelEvent)+(96))>>2)] = e["deltaMode"];
-        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, wheelEvent, userData)) e.preventDefault();
-      };
-  
-      var eventHandler = {
-        target: target,
-        allowsDeferredCalls: true,
-        eventTypeString: eventTypeString,
-        callbackfunc: callbackfunc,
-        handlerFunc: wheelHandlerFunc,
-        useCapture: useCapture
-      };
-      JSEvents.registerOrRemoveHandler(eventHandler);
-    }
-  function _emscripten_set_wheel_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
-      target = findEventTarget(target);
-      if (typeof target.onwheel != 'undefined') {
-        registerWheelEventCallback(target, userData, useCapture, callbackfunc, 9, "wheel", targetThread);
-        return 0;
-      } else {
-        return -1;
-      }
-    }
-
-  function _emscripten_set_window_title(title) {
-      setWindowTitle(UTF8ToString(title));
-    }
-
-  function _emscripten_sleep(ms) {
-      // emscripten_sleep() does not return a value, but we still need a |return|
-      // here for stack switching support (ASYNCIFY=2). In that mode this function
-      // returns a Promise instead of nothing, and that Promise is what tells the
-      // wasm VM to pause the stack.
-      return Asyncify.handleSleep((wakeUp) => safeSetTimeout(wakeUp, ms));
-    }
-
-  function __webgl_enable_ANGLE_instanced_arrays(ctx) {
-      // Extension available in WebGL 1 from Firefox 26 and Google Chrome 30 onwards. Core feature in WebGL 2.
-      var ext = ctx.getExtension('ANGLE_instanced_arrays');
-      if (ext) {
-        ctx['vertexAttribDivisor'] = function(index, divisor) { ext['vertexAttribDivisorANGLE'](index, divisor); };
-        ctx['drawArraysInstanced'] = function(mode, first, count, primcount) { ext['drawArraysInstancedANGLE'](mode, first, count, primcount); };
-        ctx['drawElementsInstanced'] = function(mode, count, type, indices, primcount) { ext['drawElementsInstancedANGLE'](mode, count, type, indices, primcount); };
-        return 1;
-      }
-    }
-  
-  function __webgl_enable_OES_vertex_array_object(ctx) {
-      // Extension available in WebGL 1 from Firefox 25 and WebKit 536.28/desktop Safari 6.0.3 onwards. Core feature in WebGL 2.
-      var ext = ctx.getExtension('OES_vertex_array_object');
-      if (ext) {
-        ctx['createVertexArray'] = function() { return ext['createVertexArrayOES'](); };
-        ctx['deleteVertexArray'] = function(vao) { ext['deleteVertexArrayOES'](vao); };
-        ctx['bindVertexArray'] = function(vao) { ext['bindVertexArrayOES'](vao); };
-        ctx['isVertexArray'] = function(vao) { return ext['isVertexArrayOES'](vao); };
-        return 1;
-      }
-    }
-  
-  function __webgl_enable_WEBGL_draw_buffers(ctx) {
-      // Extension available in WebGL 1 from Firefox 28 onwards. Core feature in WebGL 2.
-      var ext = ctx.getExtension('WEBGL_draw_buffers');
-      if (ext) {
-        ctx['drawBuffers'] = function(n, bufs) { ext['drawBuffersWEBGL'](n, bufs); };
-        return 1;
-      }
-    }
-  
-  function __webgl_enable_WEBGL_draw_instanced_base_vertex_base_instance(ctx) {
-      // Closure is expected to be allowed to minify the '.dibvbi' property, so not accessing it quoted.
-      return !!(ctx.dibvbi = ctx.getExtension('WEBGL_draw_instanced_base_vertex_base_instance'));
-    }
-  
-  function __webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(ctx) {
-      // Closure is expected to be allowed to minify the '.mdibvbi' property, so not accessing it quoted.
-      return !!(ctx.mdibvbi = ctx.getExtension('WEBGL_multi_draw_instanced_base_vertex_base_instance'));
-    }
-  
-  function __webgl_enable_WEBGL_multi_draw(ctx) {
-      // Closure is expected to be allowed to minify the '.multiDrawWebgl' property, so not accessing it quoted.
-      return !!(ctx.multiDrawWebgl = ctx.getExtension('WEBGL_multi_draw'));
-    }
-  var GL = {counter:1,buffers:[],programs:[],framebuffers:[],renderbuffers:[],textures:[],shaders:[],vaos:[],contexts:[],offscreenCanvases:{},queries:[],samplers:[],transformFeedbacks:[],syncs:[],stringCache:{},stringiCache:{},unpackAlignment:4,recordError:function recordError(errorCode) {
-        if (!GL.lastError) {
-          GL.lastError = errorCode;
-        }
-      },getNewId:function(table) {
-        var ret = GL.counter++;
-        for (var i = table.length; i < ret; i++) {
-          table[i] = null;
-        }
-        return ret;
-      },getSource:function(shader, count, string, length) {
-        var source = '';
-        for (var i = 0; i < count; ++i) {
-          var len = length ? HEAP32[(((length)+(i*4))>>2)] : -1;
-          source += UTF8ToString(HEAP32[(((string)+(i*4))>>2)], len < 0 ? undefined : len);
-        }
-        return source;
-      },createContext:function(/** @type {HTMLCanvasElement} */ canvas, webGLContextAttributes) {
-  
-        // BUG: Workaround Safari WebGL issue: After successfully acquiring WebGL context on a canvas,
-        // calling .getContext() will always return that context independent of which 'webgl' or 'webgl2'
-        // context version was passed. See https://bugs.webkit.org/show_bug.cgi?id=222758 and
-        // https://github.com/emscripten-core/emscripten/issues/13295.
-        // TODO: Once the bug is fixed and shipped in Safari, adjust the Safari version field in above check.
-        if (!canvas.getContextSafariWebGL2Fixed) {
-          canvas.getContextSafariWebGL2Fixed = canvas.getContext;
-          /** @type {function(this:HTMLCanvasElement, string, (Object|null)=): (Object|null)} */
-          function fixedGetContext(ver, attrs) {
-            var gl = canvas.getContextSafariWebGL2Fixed(ver, attrs);
-            return ((ver == 'webgl') == (gl instanceof WebGLRenderingContext)) ? gl : null;
-          }
-          canvas.getContext = fixedGetContext;
-        }
-  
-        var ctx = 
-          (webGLContextAttributes.majorVersion > 1)
-          ?
-            canvas.getContext("webgl2", webGLContextAttributes)
-          :
-          (canvas.getContext("webgl", webGLContextAttributes)
-            // https://caniuse.com/#feat=webgl
-            );
-  
-        if (!ctx) return 0;
-  
-        var handle = GL.registerContext(ctx, webGLContextAttributes);
-  
-        return handle;
-      },registerContext:function(ctx, webGLContextAttributes) {
-        // without pthreads a context is just an integer ID
-        var handle = GL.getNewId(GL.contexts);
-  
-        var context = {
-          handle: handle,
-          attributes: webGLContextAttributes,
-          version: webGLContextAttributes.majorVersion,
-          GLctx: ctx
-        };
-  
-        // Store the created context object so that we can access the context given a canvas without having to pass the parameters again.
-        if (ctx.canvas) ctx.canvas.GLctxObject = context;
-        GL.contexts[handle] = context;
-        if (typeof webGLContextAttributes.enableExtensionsByDefault == 'undefined' || webGLContextAttributes.enableExtensionsByDefault) {
-          GL.initExtensions(context);
-        }
-  
-        return handle;
-      },makeContextCurrent:function(contextHandle) {
-  
-        GL.currentContext = GL.contexts[contextHandle]; // Active Emscripten GL layer context object.
-        Module.ctx = GLctx = GL.currentContext && GL.currentContext.GLctx; // Active WebGL context object.
-        return !(contextHandle && !GLctx);
-      },getContext:function(contextHandle) {
-        return GL.contexts[contextHandle];
-      },deleteContext:function(contextHandle) {
-        if (GL.currentContext === GL.contexts[contextHandle]) GL.currentContext = null;
-        if (typeof JSEvents == 'object') JSEvents.removeAllHandlersOnTarget(GL.contexts[contextHandle].GLctx.canvas); // Release all JS event handlers on the DOM element that the GL context is associated with since the context is now deleted.
-        if (GL.contexts[contextHandle] && GL.contexts[contextHandle].GLctx.canvas) GL.contexts[contextHandle].GLctx.canvas.GLctxObject = undefined; // Make sure the canvas object no longer refers to the context object so there are no GC surprises.
-        GL.contexts[contextHandle] = null;
-      },initExtensions:function(context) {
-        // If this function is called without a specific context object, init the extensions of the currently active context.
-        if (!context) context = GL.currentContext;
-  
-        if (context.initExtensionsDone) return;
-        context.initExtensionsDone = true;
-  
-        var GLctx = context.GLctx;
-  
-        // Detect the presence of a few extensions manually, this GL interop layer itself will need to know if they exist.
-  
-        // Extensions that are only available in WebGL 1 (the calls will be no-ops if called on a WebGL 2 context active)
-        __webgl_enable_ANGLE_instanced_arrays(GLctx);
-        __webgl_enable_OES_vertex_array_object(GLctx);
-        __webgl_enable_WEBGL_draw_buffers(GLctx);
-        // Extensions that are available from WebGL >= 2 (no-op if called on a WebGL 1 context active)
-        __webgl_enable_WEBGL_draw_instanced_base_vertex_base_instance(GLctx);
-        __webgl_enable_WEBGL_multi_draw_instanced_base_vertex_base_instance(GLctx);
-  
-        // On WebGL 2, EXT_disjoint_timer_query is replaced with an alternative
-        // that's based on core APIs, and exposes only the queryCounterEXT()
-        // entrypoint.
-        if (context.version >= 2) {
-          GLctx.disjointTimerQueryExt = GLctx.getExtension("EXT_disjoint_timer_query_webgl2");
-        }
-  
-        // However, Firefox exposes the WebGL 1 version on WebGL 2 as well and
-        // thus we look for the WebGL 1 version again if the WebGL 2 version
-        // isn't present. https://bugzilla.mozilla.org/show_bug.cgi?id=1328882
-        if (context.version < 2 || !GLctx.disjointTimerQueryExt)
-        {
-          GLctx.disjointTimerQueryExt = GLctx.getExtension("EXT_disjoint_timer_query");
-        }
-  
-        __webgl_enable_WEBGL_multi_draw(GLctx);
-  
-        // .getSupportedExtensions() can return null if context is lost, so coerce to empty array.
-        var exts = GLctx.getSupportedExtensions() || [];
-        exts.forEach(function(ext) {
-          // WEBGL_lose_context, WEBGL_debug_renderer_info and WEBGL_debug_shaders are not enabled by default.
-          if (!ext.includes('lose_context') && !ext.includes('debug')) {
-            // Call .getExtension() to enable that extension permanently.
-            GLctx.getExtension(ext);
-          }
-        });
-      }};
-  
-  var __emscripten_webgl_power_preferences = ['default', 'low-power', 'high-performance'];
-  
-  function findCanvasEventTarget(target) { return findEventTarget(target); }
-  function _emscripten_webgl_do_create_context(target, attributes) {
-      assert(attributes);
-      var a = attributes >> 2;
-      var powerPreference = HEAP32[a + (24>>2)];
-      var contextAttributes = {
-        'alpha': !!HEAP32[a + (0>>2)],
-        'depth': !!HEAP32[a + (4>>2)],
-        'stencil': !!HEAP32[a + (8>>2)],
-        'antialias': !!HEAP32[a + (12>>2)],
-        'premultipliedAlpha': !!HEAP32[a + (16>>2)],
-        'preserveDrawingBuffer': !!HEAP32[a + (20>>2)],
-        'powerPreference': __emscripten_webgl_power_preferences[powerPreference],
-        'failIfMajorPerformanceCaveat': !!HEAP32[a + (28>>2)],
-        // The following are not predefined WebGL context attributes in the WebGL specification, so the property names can be minified by Closure.
-        majorVersion: HEAP32[a + (32>>2)],
-        minorVersion: HEAP32[a + (36>>2)],
-        enableExtensionsByDefault: HEAP32[a + (40>>2)],
-        explicitSwapControl: HEAP32[a + (44>>2)],
-        proxyContextToMainThread: HEAP32[a + (48>>2)],
-        renderViaOffscreenBackBuffer: HEAP32[a + (52>>2)]
-      };
-  
-      var canvas = findCanvasEventTarget(target);
-  
-      if (!canvas) {
-        return 0;
-      }
-  
-      if (contextAttributes.explicitSwapControl) {
-        return 0;
-      }
-  
-      var contextHandle = GL.createContext(canvas, contextAttributes);
-      return contextHandle;
-    }
-  var _emscripten_webgl_create_context = _emscripten_webgl_do_create_context;
-
-  function _emscripten_webgl_init_context_attributes(attributes) {
-      assert(attributes);
-      var a = attributes >> 2;
-      for (var i = 0; i < (56>>2); ++i) {
-        HEAP32[a+i] = 0;
-      }
-  
-      HEAP32[a + (0>>2)] =
-      HEAP32[a + (4>>2)] = 
-      HEAP32[a + (12>>2)] = 
-      HEAP32[a + (16>>2)] = 
-      HEAP32[a + (32>>2)] = 
-      HEAP32[a + (40>>2)] = 1;
-  
-    }
-
   function _fd_close(fd) {
   try {
   
@@ -6092,206 +5523,6 @@ var ASM_CONSTS = {
     return e.errno;
   }
   }
-
-  function _glBindBuffer(target, buffer) {
-  
-      if (target == 0x88EB /*GL_PIXEL_PACK_BUFFER*/) {
-        // In WebGL 2 glReadPixels entry point, we need to use a different WebGL 2 API function call when a buffer is bound to
-        // GL_PIXEL_PACK_BUFFER_BINDING point, so must keep track whether that binding point is non-null to know what is
-        // the proper API function to call.
-        GLctx.currentPixelPackBufferBinding = buffer;
-      } else if (target == 0x88EC /*GL_PIXEL_UNPACK_BUFFER*/) {
-        // In WebGL 2 gl(Compressed)Tex(Sub)Image[23]D entry points, we need to
-        // use a different WebGL 2 API function call when a buffer is bound to
-        // GL_PIXEL_UNPACK_BUFFER_BINDING point, so must keep track whether that
-        // binding point is non-null to know what is the proper API function to
-        // call.
-        GLctx.currentPixelUnpackBufferBinding = buffer;
-      }
-      GLctx.bindBuffer(target, GL.buffers[buffer]);
-    }
-
-  function _glBufferData(target, size, data, usage) {
-  
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        // If size is zero, WebGL would interpret uploading the whole input arraybuffer (starting from given offset), which would
-        // not make sense in WebAssembly, so avoid uploading if size is zero. However we must still call bufferData to establish a
-        // backing storage of zero bytes.
-        if (data && size) {
-          GLctx.bufferData(target, HEAPU8, usage, data, size);
-        } else {
-          GLctx.bufferData(target, size, usage);
-        }
-      } else {
-        // N.b. here first form specifies a heap subarray, second form an integer size, so the ?: code here is polymorphic. It is advised to avoid
-        // randomly mixing both uses in calling code, to avoid any potential JS engine JIT issues.
-        GLctx.bufferData(target, data ? HEAPU8.subarray(data, data+size) : size, usage);
-      }
-    }
-
-  function _glBufferSubData(target, offset, size, data) {
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        size && GLctx.bufferSubData(target, offset, HEAPU8, data, size);
-        return;
-      }
-      GLctx.bufferSubData(target, offset, HEAPU8.subarray(data, data+size));
-    }
-
-  function _glClear(x0) { GLctx['clear'](x0) }
-
-  function _glClearColor(x0, x1, x2, x3) { GLctx['clearColor'](x0, x1, x2, x3) }
-
-  function _glDrawArrays(mode, first, count) {
-  
-      GLctx.drawArrays(mode, first, count);
-  
-    }
-
-  function _glEnableVertexAttribArray(index) {
-      GLctx.enableVertexAttribArray(index);
-    }
-
-  function __glGenObject(n, buffers, createFunction, objectTable
-      ) {
-      for (var i = 0; i < n; i++) {
-        var buffer = GLctx[createFunction]();
-        var id = buffer && GL.getNewId(objectTable);
-        if (buffer) {
-          buffer.name = id;
-          objectTable[id] = buffer;
-        } else {
-          GL.recordError(0x502 /* GL_INVALID_OPERATION */);
-        }
-        HEAP32[(((buffers)+(i*4))>>2)] = id;
-      }
-    }
-  function _glGenBuffers(n, buffers) {
-      __glGenObject(n, buffers, 'createBuffer', GL.buffers
-        );
-    }
-
-  /** @suppress {checkTypes} */
-  function jstoi_q(str) {
-      return parseInt(str);
-    }
-  
-  /** @noinline */
-  function webglGetLeftBracePos(name) {
-      return name.slice(-1) == ']' && name.lastIndexOf('[');
-    }
-  function webglPrepareUniformLocationsBeforeFirstUse(program) {
-      var uniformLocsById = program.uniformLocsById, // Maps GLuint -> WebGLUniformLocation
-        uniformSizeAndIdsByName = program.uniformSizeAndIdsByName, // Maps name -> [uniform array length, GLuint]
-        i, j;
-  
-      // On the first time invocation of glGetUniformLocation on this shader program:
-      // initialize cache data structures and discover which uniforms are arrays.
-      if (!uniformLocsById) {
-        // maps GLint integer locations to WebGLUniformLocations
-        program.uniformLocsById = uniformLocsById = {};
-        // maps integer locations back to uniform name strings, so that we can lazily fetch uniform array locations
-        program.uniformArrayNamesById = {};
-  
-        for (i = 0; i < GLctx.getProgramParameter(program, 0x8B86/*GL_ACTIVE_UNIFORMS*/); ++i) {
-          var u = GLctx.getActiveUniform(program, i);
-          var nm = u.name;
-          var sz = u.size;
-          var lb = webglGetLeftBracePos(nm);
-          var arrayName = lb > 0 ? nm.slice(0, lb) : nm;
-  
-          // Assign a new location.
-          var id = program.uniformIdCounter;
-          program.uniformIdCounter += sz;
-          // Eagerly get the location of the uniformArray[0] base element.
-          // The remaining indices >0 will be left for lazy evaluation to
-          // improve performance. Those may never be needed to fetch, if the
-          // application fills arrays always in full starting from the first
-          // element of the array.
-          uniformSizeAndIdsByName[arrayName] = [sz, id];
-  
-          // Store placeholder integers in place that highlight that these
-          // >0 index locations are array indices pending population.
-          for(j = 0; j < sz; ++j) {
-            uniformLocsById[id] = j;
-            program.uniformArrayNamesById[id++] = arrayName;
-          }
-        }
-      }
-    }
-  function _glGetUniformLocation(program, name) {
-  
-      name = UTF8ToString(name);
-  
-      if (program = GL.programs[program]) {
-        webglPrepareUniformLocationsBeforeFirstUse(program);
-        var uniformLocsById = program.uniformLocsById; // Maps GLuint -> WebGLUniformLocation
-        var arrayIndex = 0;
-        var uniformBaseName = name;
-  
-        // Invariant: when populating integer IDs for uniform locations, we must maintain the precondition that
-        // arrays reside in contiguous addresses, i.e. for a 'vec4 colors[10];', colors[4] must be at location colors[0]+4.
-        // However, user might call glGetUniformLocation(program, "colors") for an array, so we cannot discover based on the user
-        // input arguments whether the uniform we are dealing with is an array. The only way to discover which uniforms are arrays
-        // is to enumerate over all the active uniforms in the program.
-        var leftBrace = webglGetLeftBracePos(name);
-  
-        // If user passed an array accessor "[index]", parse the array index off the accessor.
-        if (leftBrace > 0) {
-          arrayIndex = jstoi_q(name.slice(leftBrace + 1)) >>> 0; // "index]", coerce parseInt(']') with >>>0 to treat "foo[]" as "foo[0]" and foo[-1] as unsigned out-of-bounds.
-          uniformBaseName = name.slice(0, leftBrace);
-        }
-  
-        // Have we cached the location of this uniform before?
-        var sizeAndId = program.uniformSizeAndIdsByName[uniformBaseName]; // A pair [array length, GLint of the uniform location]
-  
-        // If an uniform with this name exists, and if its index is within the array limits (if it's even an array),
-        // query the WebGLlocation, or return an existing cached location.
-        if (sizeAndId && arrayIndex < sizeAndId[0]) {
-          arrayIndex += sizeAndId[1]; // Add the base location of the uniform to the array index offset.
-          if ((uniformLocsById[arrayIndex] = uniformLocsById[arrayIndex] || GLctx.getUniformLocation(program, name))) {
-            return arrayIndex;
-          }
-        }
-      }
-      else {
-        // N.b. we are currently unable to distinguish between GL program IDs that never existed vs GL program IDs that have been deleted,
-        // so report GL_INVALID_VALUE in both cases.
-        GL.recordError(0x501 /* GL_INVALID_VALUE */);
-      }
-      return -1;
-    }
-
-  function webglGetUniformLocation(location) {
-      var p = GLctx.currentProgram;
-  
-      if (p) {
-        var webglLoc = p.uniformLocsById[location];
-        // p.uniformLocsById[location] stores either an integer, or a WebGLUniformLocation.
-  
-        // If an integer, we have not yet bound the location, so do it now. The integer value specifies the array index
-        // we should bind to.
-        if (typeof webglLoc == 'number') {
-          p.uniformLocsById[location] = webglLoc = GLctx.getUniformLocation(p, p.uniformArrayNamesById[location] + (webglLoc > 0 ? '[' + webglLoc + ']' : ''));
-        }
-        // Else an already cached WebGLUniformLocation, return it.
-        return webglLoc;
-      } else {
-        GL.recordError(0x502/*GL_INVALID_OPERATION*/);
-      }
-    }
-  function _glUniform1i(location, v0) {
-      GLctx.uniform1i(webglGetUniformLocation(location), v0);
-    }
-
-  function _glUniform4f(location, v0, v1, v2, v3) {
-      GLctx.uniform4f(webglGetUniformLocation(location), v0, v1, v2, v3);
-    }
-
-  function _glVertexAttribPointer(index, size, type, normalized, stride, ptr) {
-      GLctx.vertexAttribPointer(index, size, type, !!normalized, stride, ptr);
-    }
-
-  function _glViewport(x0, x1, x2, x3) { GLctx['viewport'](x0, x1, x2, x3) }
 
   var tempRet0 = 0;
   function setTempRet0(val) {
@@ -7112,7 +6343,6 @@ embind_init_charCodes();
 BindingError = Module['BindingError'] = extendError(Error, 'BindingError');;
 InternalError = Module['InternalError'] = extendError(Error, 'InternalError');;
 init_emval();;
-var GLctx;;
 var ASSERTIONS = true;
 
 // Copied from https://github.com/strophe/strophejs/blob/e06d027/src/polyfills.js#L149
@@ -7191,7 +6421,6 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
 var asmLibraryArg = {
-  "__assert_fail": ___assert_fail,
   "__cxa_allocate_exception": ___cxa_allocate_exception,
   "__cxa_throw": ___cxa_throw,
   "_embind_register_bigint": __embind_register_bigint,
@@ -7203,53 +6432,13 @@ var asmLibraryArg = {
   "_embind_register_std_string": __embind_register_std_string,
   "_embind_register_std_wstring": __embind_register_std_wstring,
   "_embind_register_void": __embind_register_void,
-  "_emscripten_date_now": __emscripten_date_now,
-  "_emscripten_get_now_is_monotonic": __emscripten_get_now_is_monotonic,
-  "_emval_as": __emval_as,
-  "_emval_call_method": __emval_call_method,
-  "_emval_call_void_method": __emval_call_void_method,
   "_emval_decref": __emval_decref,
-  "_emval_get_global": __emval_get_global,
-  "_emval_get_method_caller": __emval_get_method_caller,
-  "_emval_get_property": __emval_get_property,
-  "_emval_incref": __emval_incref,
-  "_emval_new_cstring": __emval_new_cstring,
-  "_emval_run_destructors": __emval_run_destructors,
-  "_emval_set_property": __emval_set_property,
-  "_emval_take_value": __emval_take_value,
   "abort": _abort,
-  "emscripten_asm_const_int": _emscripten_asm_const_int,
-  "emscripten_get_now": _emscripten_get_now,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
-  "emscripten_set_click_callback_on_thread": _emscripten_set_click_callback_on_thread,
-  "emscripten_set_dblclick_callback_on_thread": _emscripten_set_dblclick_callback_on_thread,
-  "emscripten_set_keydown_callback_on_thread": _emscripten_set_keydown_callback_on_thread,
-  "emscripten_set_keyup_callback_on_thread": _emscripten_set_keyup_callback_on_thread,
-  "emscripten_set_mousedown_callback_on_thread": _emscripten_set_mousedown_callback_on_thread,
-  "emscripten_set_mousemove_callback_on_thread": _emscripten_set_mousemove_callback_on_thread,
-  "emscripten_set_mouseup_callback_on_thread": _emscripten_set_mouseup_callback_on_thread,
-  "emscripten_set_wheel_callback_on_thread": _emscripten_set_wheel_callback_on_thread,
-  "emscripten_set_window_title": _emscripten_set_window_title,
-  "emscripten_sleep": _emscripten_sleep,
-  "emscripten_webgl_create_context": _emscripten_webgl_create_context,
-  "emscripten_webgl_init_context_attributes": _emscripten_webgl_init_context_attributes,
   "fd_close": _fd_close,
   "fd_seek": _fd_seek,
   "fd_write": _fd_write,
-  "glBindBuffer": _glBindBuffer,
-  "glBufferData": _glBufferData,
-  "glBufferSubData": _glBufferSubData,
-  "glClear": _glClear,
-  "glClearColor": _glClearColor,
-  "glDrawArrays": _glDrawArrays,
-  "glEnableVertexAttribArray": _glEnableVertexAttribArray,
-  "glGenBuffers": _glGenBuffers,
-  "glGetUniformLocation": _glGetUniformLocation,
-  "glUniform1i": _glUniform1i,
-  "glUniform4f": _glUniform4f,
-  "glVertexAttribPointer": _glVertexAttribPointer,
-  "glViewport": _glViewport,
   "setTempRet0": _setTempRet0
 };
 Asyncify.instrumentWasmImports(asmLibraryArg);
@@ -7322,22 +6511,13 @@ var dynCall_vi = Module["dynCall_vi"] = createExportWrapper("dynCall_vi");
 var dynCall_ii = Module["dynCall_ii"] = createExportWrapper("dynCall_ii");
 
 /** @type {function(...*):?} */
-var dynCall_iiiiii = Module["dynCall_iiiiii"] = createExportWrapper("dynCall_iiiiii");
+var dynCall_v = Module["dynCall_v"] = createExportWrapper("dynCall_v");
 
 /** @type {function(...*):?} */
 var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
 
 /** @type {function(...*):?} */
-var dynCall_v = Module["dynCall_v"] = createExportWrapper("dynCall_v");
-
-/** @type {function(...*):?} */
 var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
-
-/** @type {function(...*):?} */
-var dynCall_iidiiii = Module["dynCall_iidiiii"] = createExportWrapper("dynCall_iidiiii");
-
-/** @type {function(...*):?} */
-var dynCall_vii = Module["dynCall_vii"] = createExportWrapper("dynCall_vii");
 
 /** @type {function(...*):?} */
 var dynCall_viiiiii = Module["dynCall_viiiiii"] = createExportWrapper("dynCall_viiiiii");
@@ -7722,7 +6902,9 @@ var missingLibrarySymbols = [
   'getHostByName',
   'traverseStack',
   'convertPCtoSourceLocation',
+  'readAsmConstArgs',
   'mainThreadEM_ASM',
+  'jstoi_q',
   'jstoi_s',
   'getExecutableName',
   'listenOnce',
@@ -7747,6 +6929,14 @@ var missingLibrarySymbols = [
   'formatString',
   'getSocketFromFD',
   'getSocketAddress',
+  'registerKeyEventCallback',
+  'maybeCStringToJsString',
+  'findEventTarget',
+  'findCanvasEventTarget',
+  'getBoundingClientRect',
+  'fillMouseEventData',
+  'registerMouseEventCallback',
+  'registerWheelEventCallback',
   'registerUiEventCallback',
   'registerFocusEventCallback',
   'fillDeviceOrientationEventData',
@@ -7796,6 +6986,9 @@ var missingLibrarySymbols = [
   'computeUnpackAlignedImageSize',
   'emscriptenWebGLGetTexPixelData',
   'emscriptenWebGLGetUniform',
+  'webglGetUniformLocation',
+  'webglPrepareUniformLocationsBeforeFirstUse',
+  'webglGetLeftBracePos',
   'emscriptenWebGLGetVertexAttrib',
   'writeGLArray',
   'SDL_unicode',
@@ -7814,8 +7007,12 @@ var missingLibrarySymbols = [
   'getInheritedInstance',
   'getInheritedInstanceCount',
   'getLiveInheritedInstances',
+  'getTypeName',
   'heap32VectorToArray',
+  'requireRegisteredType',
   'enumReadValueFromPointer',
+  'runDestructors',
+  'new_',
   'craftInvokerFunction',
   'embind__requireFunction',
   'genericPointerToWireType',
@@ -7847,7 +7044,12 @@ var missingLibrarySymbols = [
   'downcastPointer',
   'upcastPointer',
   'validateThis',
+  'getStringOrSymbol',
   'craftEmvalAllocator',
+  'emval_get_global',
+  'emval_lookupTypes',
+  'emval_allocateDestructors',
+  'emval_addMethodCaller',
 ];
 missingLibrarySymbols.forEach(missingLibrarySymbol)
 

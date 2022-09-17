@@ -87,10 +87,16 @@ void ImGui_ImplMova_Init() {
 
 void ImGui_ImplMova_NewFrame(Window* window) {
   ImGuiIO& io = ImGui::GetIO();
-  io.DisplaySize = ImVec2(windowWidth(window), windowHeight(window));
+  io.DisplaySize = ImVec2(getViewportWidth(), getViewportHeight());
   io.DeltaTime = deltaTime();
   ImGui_ImplOpenGL3_NewFrame();
   ImGui::NewFrame();
+}
+
+void ImGui_ImplMova_Render() {
+  ImGui::Render();
+  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+  nextFrame();
 }
 
 void ImGui_ImplMova_Shutdown() {

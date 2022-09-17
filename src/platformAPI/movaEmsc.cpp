@@ -1,6 +1,5 @@
 #include "mova.h"
 #ifdef __EMSCRIPTEN__
-#include "glUtil.h"
 #include <map>
 #include <string>
 #include <chrono>
@@ -9,53 +8,105 @@
 #include <emscripten/html5.h>
 
 using emscripten::val;
-const val JSdocument = val::global("document");
+
+namespace Mova {
+struct WindowData {
+  inline WindowData() {}
+  inline ~WindowData() {}
+
+  std::string title;
+  int mouseX, mouseY;
+  val canvas;
+  union {
+    val context;
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = 0;
+  };
+};
+
+Window::Window(std::string title, Renderer* renderer) : data(new WindowData()) {
+  emscripten_set_window_title(title.c_str());
+  // clang-format off
+  EM_ASM(
+    addOnPostRun(function() {
+      if (Module.canvas) Module.canvas.focus();
+    });
+  );
+  // clang-format on
+  val canvas = val::global("document").call<val>("getElementById", val("canvas"));
+  __Window* window;
+  if (openGL) {
+    EmscriptenWebGLContextAttributes attrs;
+    emscripten_webgl_init_context_attributes(&attrs);
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = emscripten_webgl_create_context("#canvas", &attrs);
+    window = new __Window(canvas, glContext);
+  } else {
+    window = new __Window(canvas, canvas.call<val>("getContext", val("2d")));
+  }
+
+  emscripten_set_click_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_mousedown_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_mouseup_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_dblclick_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_mousemove_callback("#canvas", window, false, mouseCallback);
+  emscripten_set_wheel_callback("#canvas", nullptr, false, mouseScrollCallback);
+  emscripten_set_keydown_callback("#canvas", (void*)true, true, keyCallback);
+  emscripten_set_keyup_callback("#canvas", (void*)false, true, keyCallback);
+}
+Window::~Window() {}
+}  // namespace Mova
 
 static float scrollX, scrollY, dt;
+static int mouseDeltaX, mouseDeltaY;
 static uint8_t mousePressed = 0, mouseReleased = 0, mouseState = 0;
 static std::map<Key, uint8_t> keyStates;
 static char charPressed;
 
+static uint32_t viewportWidth, viewportHeight;
+static val canvas, context;
+static Window* window;
+static bool openGL;
+
+static bool antialiasingEnabled = false;
 static ScrollCallback userScrollCallback;
 static MouseCallback userMouseCallback;
 static KeyCallback userKeyCallback;
-static Shader* defaultShader;
+static Shader defaultShader;
 
 /*                    DATA                    */
 struct __Window : public Window {
-  bool antialiasing, gl = false;
+  bool openGL = false;
   int mouseX, mouseY;
   val canvas;
   union {
-    val ctx;
+    val context;
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = 0;
   };
 
-  __Window(val canvas, val ctx) : canvas(canvas), ctx(ctx) {}
-  __Window(val canvas, EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext) : canvas(canvas), glContext(glContext), gl(true) {}
+  __Window(val canvas, val context) : canvas(canvas), context(context) {}
+  __Window(val canvas, EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext) : canvas(canvas), glContext(glContext), openGL(true) {}
   virtual ~__Window() noexcept {}
 };
 
 struct __Image : public Image {
   char* image;
-  emscripten::val JSimage;
-  __Image(char* image, int width, int height, emscripten::val JSimage) : image(image), Image(width, height), JSimage(JSimage) {}
+  val JSimage;
+  __Image(char* image, int width, int height, val JSimage) : image(image), Image(width, height), JSimage(JSimage) {}
   __Image(GLuint texture, int width, int height) : Image(width, height, texture) {}
   virtual ~__Image() noexcept {}
 };
 
 struct __Audio : public Audio {
-  emscripten::val audio;
-  __Audio(emscripten::val audio) : audio(audio) {}
+  val audio;
+  __Audio(val audio) : audio(audio) {}
   virtual ~__Audio() noexcept {}
 };
 
 // clang-format off
-Color::Color(int red, int green, int blue, int alpha) { sprintf(color, "#%02x%02x%02x%02x", red, green, blue, alpha); }
-int Color::red() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return red; }
-int Color::green() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return green; }
-int Color::blue() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return blue; }
-int Color::alpha() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return alpha; }
+// Color::Color(int red, int green, int blue, int alpha) { sprintf(color, "#%02x%02x%02x%02x", red, green, blue, alpha); }
+// int Color::red() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return red; }
+// int Color::green() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return green; }
+// int Color::blue() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return blue; }
+// int Color::alpha() { int red, green, blue, alpha; sscanf(color, "#%02x%02x%02x%02x", &red, &green, &blue, &alpha); return alpha; }
 // clang-format on
 
 template <typename K, typename V>
@@ -131,6 +182,8 @@ std::map<std::string, Key> keyMap = {
 EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData) {
   ((__Window*)userData)->mouseX = e->targetX;
   ((__Window*)userData)->mouseY = e->targetY;
+  mouseDeltaX = e->movementX;
+  mouseDeltaY = e->movementY;
   mousePressed = ~mouseState & e->buttons;
   mouseReleased = mouseState & ~e->buttons;
   mouseState = e->buttons;
@@ -161,13 +214,13 @@ EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userD
   } else if (userData) {
     keyStates[key] |= 0b00001000;
   }
-  return true;
+  return !(key == Key::I && e->ctrlKey && e->shiftKey || key == Key::F5);
 }
 
 /*                    FUNCTIONS                    */
 
 // Creating things
-Window* createWindow(const std::string& title, bool gl) {
+Window* createWindow(const std::string& title, bool openGL) {
   emscripten_set_window_title(title.c_str());
   // clang-format off
   EM_ASM(
@@ -176,9 +229,9 @@ Window* createWindow(const std::string& title, bool gl) {
     });
   );
   // clang-format on
-  val canvas = JSdocument.call<val>("getElementById", val("canvas"));
+  val canvas = val::global("document").call<val>("getElementById", val("canvas"));
   __Window* window;
-  if (gl) {
+  if (openGL) {
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = emscripten_webgl_create_context("#canvas", &attrs);
@@ -198,15 +251,15 @@ Window* createWindow(const std::string& title, bool gl) {
   return window;
 }
 
-Image* createImage(int width, int height, Window* window) {
-  if (((__Window*)window)->gl) {
+Image* createImage(int width, int height, const char* image) {
+  if (openGL) {
     GLuint texture;
     glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, antialiasingEnabled ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, antialiasingEnabled ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -219,34 +272,31 @@ Image* createImage(int width, int height, Window* window) {
       image[i + 2] = 0;
       image[i + 3] = (char)255;
     }
-    val canvas = JSdocument.call<val>("getElementById", val("canvas"));
-    val ctx = canvas.call<val>("getContext", val("2d"));
     val imageData = val::global("ImageData").new_(val::global("Uint8ClampedArray").new_(emscripten::typed_memory_view<uint8_t>(width * height * 4, (uint8_t*)image)), width, height);
-    int w = canvas["width"].as<int>(), h = canvas["height"].as<int>();
     canvas.set("width", width);
     canvas.set("height", height);
-    ctx.call<void>("putImageData", imageData, 0, 0);
+    context.call<void>("putImageData", imageData, 0, 0);
     val JSimage = val::global("Image").new_();
     JSimage.set("src", canvas.call<val>("toDataURL"));
-    canvas.set("width", w);
-    canvas.set("height", h);
+    canvas.set("width", viewportWidth);
+    canvas.set("height", viewportHeight);
 
     return new __Image(image, width, height, JSimage);
   }
 }
 
-Image* loadImage(const std::string& filename, Window* window) {
+Image* loadImage(const std::string& filename) {
   int width, height;
   char* image = emscripten_get_preloaded_image_data(filename.c_str(), &width, &height);
   assert(image && "Failed to load image");
-  if (((__Window*)window)->gl) {
+  if (openGL) {
     GLuint texture;
     glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ((__Window*)window)->antialiasing ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, antialiasingEnabled ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, antialiasingEnabled ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -254,50 +304,33 @@ Image* loadImage(const std::string& filename, Window* window) {
 
     return new __Image(texture, width, height);
   } else {
-    val canvas = JSdocument.call<val>("getElementById", val("canvas"));
-    val ctx = canvas.call<val>("getContext", val("2d"));
     val imageData = val::global("ImageData").new_(val::global("Uint8ClampedArray").new_(emscripten::typed_memory_view<uint8_t>(width * height * 4, (uint8_t*)image)), width, height);
-    int w = canvas["width"].as<int>(), h = canvas["height"].as<int>();
     canvas.set("width", width);
     canvas.set("height", height);
-    ctx.call<void>("putImageData", imageData, 0, 0);
+    context.call<void>("putImageData", imageData, 0, 0);
     val JSimage = val::global("Image").new_();
     JSimage.set("src", canvas.call<val>("toDataURL"));
-    canvas.set("width", w);
-    canvas.set("height", h);
+    canvas.set("width", viewportWidth);
+    canvas.set("height", viewportHeight);
 
     return new __Image(image, width, height, JSimage);
   }
 }
 
 Audio* loadAudio(const std::string& filename) {
-  // val::global("wasmMemory").call<void>("grow", 1);
-  // FILE* file = fopen(filename.c_str(), "rb");
-  // assert(file && "Failed to load audio");
-
-  // fseek(file, 0L, SEEK_END);
-  // size_t length = ftell(file);
-  // fseek(file, 0L, SEEK_SET);
-
-  // unsigned char* buffer = new unsigned char[length];
-  // fread(buffer, length, 1, file);
-  // fclose(file);
-
-  // val audio = val::global("Audio").new_("data:audio/" + filename.substr(filename.find_last_of(".") + 1) + ";base64," + base64(buffer, length));
-  // delete[] buffer;
   val audio = val::global("Audio").new_(filename);
   return new __Audio(audio);
 }
 
 // Destroying things
 void destroyWindow(Window* window) {
-  if (((__Window*)window)->gl) emscripten_webgl_destroy_context(((__Window*)window)->glContext);
+  if (((__Window*)window)->openGL) emscripten_webgl_destroy_context(((__Window*)window)->glContext);
   delete window;
 }
 
 void destroyImage(Image* image) {
-  if (((__Image*)image)->texture) {
-    glDeleteTextures(1, &((__Image*)image)->texture);
+  if (image->texture) {
+    glDeleteTextures(1, &image->texture);
   } else {
     free(((__Image*)image)->image);
   }
@@ -307,113 +340,141 @@ void destroyImage(Image* image) {
 void destroyAudio(Audio* audio) { delete audio; }
 
 // Params
-int windowWidth(Window* window) { return ((__Window*)window)->canvas["width"].as<int>(); }
-int windowHeight(Window* window) { return ((__Window*)window)->canvas["height"].as<int>(); }
-void antialiasing(Window* window, bool enabled) {
-  ((__Window*)window)->antialiasing = enabled;
+void setContext(Window* window) {
+  if (((__Window*)window)->openGL) {
+    openGL = true;
+    emscripten_webgl_make_context_current(((__Window*)window)->glContext);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  } else {
+    openGL = false;
+    context = ((__Window*)window)->context;
+  }
+  canvas = ((__Window*)window)->canvas;
+  viewportWidth = canvas["width"].as<int>();
+  viewportHeight = canvas["height"].as<int>();
+  ::window = window;
+}
+
+void bindFramebuffer(GLuint framebuffer, uint32_t width, uint32_t height) {
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+  if (framebuffer) {
+    viewportWidth = width;
+    viewportHeight = height;
+  } else {
+    viewportWidth = canvas["width"].as<int>();
+    viewportHeight = canvas["height"].as<int>();
+  }
+}
+
+uint32_t getViewportWidth() { return viewportWidth; }
+uint32_t getViewportHeight() { return viewportHeight; }
+void antialiasing(bool enabled) {
+  antialiasingEnabled = enabled;
   EM_ASM({ addOnPostRun(function() { Module.canvas.getContext('2d').imageSmoothingEnabled = $0; }); }, enabled);
 }
 
 // Drawment
-void fillRect(Window* window, int x, int y, int w, int h, Color color) {
-  if (((__Window*)window)->gl) {
-    setShaderBool(defaultShader, "textured", false);
-    setShaderColor(defaultShader, "color", color.red() / 255.f, color.green() / 255.f, color.blue() / 255.f, color.alpha() / 255.f);
-    glFillRect(x, y, w, h, windowWidth(window), windowHeight(window));
-  } else {
-    ((__Window*)window)->ctx.set("fillStyle", color.color);
-    ((__Window*)window)->ctx.call<void>("fillRect", x, y, w, h);
-  }
-}
-
-void clear(Window* window, Color color) {
-  if (((__Window*)window)->gl) {
-    glClearColor(color.red() / 255.f, color.green() / 255.f, color.blue() / 255.f, color.alpha() / 255.f);
+void clear(Color color) {
+  if (openGL) {
+    glClearColor(color.red / 255.f, color.green / 255.f, color.blue / 255.f, color.alpha / 255.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   } else {
-    fillRect(window, 0, 0, windowWidth(window), windowHeight(window), color);
+    fillRect(0, 0, viewportWidth, viewportHeight, color);
   }
 }
 
-void drawImage(Window* window, Image* image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
+void fillRect(int x, int y, int w, int h, Color color) {
+  if (openGL) {
+    setShaderBool(defaultShader, "textured", false);
+    setShaderVec4(defaultShader, "color", color.red / 255.f, color.green / 255.f, color.blue / 255.f, color.alpha / 255.f);
+    // glFillRect(x, y, w, h, viewportWidth, viewportHeight);
+    // renderer->drawRect(x, y, w, h);
+  } else {
+    context.set("fillStyle", "rgb(" + std::to_string(color.red) + ',' + std::to_string(color.green) + ',' + std::to_string(color.blue) + ',' + std::to_string(color.alpha) + ')');
+    context.call<void>("fillRect", x, y, w, h);
+  }
+}
+
+void drawImage(Image* image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
   if (w == -1) w = image->width;
   if (h == -1) h = image->height;
   if (srcW == -1) srcW = image->width;
   if (srcH == -1) srcH = image->height;
-  if (((__Window*)window)->gl) {
+  if (openGL) {
     setShaderBool(defaultShader, "textured", true);
     setShaderInt(defaultShader, "texture1", 0);
-    glDrawImage(((__Image*)image)->texture, x, y, w, h, windowWidth(window), windowHeight(window), flip, srcX, srcY, srcW, srcH, image->width, image->height);
+    // renderer->drawRect(x, y, w, h);
   } else {
     if (flip) {
-      ((__Window*)window)->ctx.call<void>("save");
-      ((__Window*)window)->ctx.call<void>("translate", windowWidth(window), 0);
-      ((__Window*)window)->ctx.call<void>("scale", 1 * (flip & FLIP_HORIZONTAL ? -1 : 1), (flip & FLIP_VERTICAL ? -1 : 1));
+      pushTransform();
+      context.call<void>("translate", (flip & FLIP_HORIZONTAL ? viewportWidth : 0), (flip & FLIP_VERTICAL ? viewportHeight : 0));
+      context.call<void>("scale", 1 * (flip & FLIP_HORIZONTAL ? -1 : 1), (flip & FLIP_VERTICAL ? -1 : 1));
     }
-    ((__Window*)window)->ctx.call<void>("drawImage", ((__Image*)image)->JSimage, srcX, srcY, srcW, srcH, (flip & FLIP_HORIZONTAL ? windowWidth(window) - x : x), (flip & FLIP_VERTICAL ? windowHeight(window) - y : y), w * (flip & FLIP_HORIZONTAL ? -1 : 1), h * (flip & FLIP_VERTICAL ? -1 : 1));
-    if (flip) ((__Window*)window)->ctx.call<void>("restore");
+    context.call<void>("drawImage", ((__Image*)image)->JSimage, srcX, srcY, srcW, srcH, (flip & FLIP_HORIZONTAL ? viewportWidth - x : x), (flip & FLIP_VERTICAL ? viewportHeight - y : y), w * (flip & FLIP_HORIZONTAL ? -1 : 1), h * (flip & FLIP_VERTICAL ? -1 : 1));
+    if (flip) popTransform();
   }
 }
 
-void setFont(Window* window, std::string font) {
-  if (((__Window*)window)->gl) {
+// Text
+void setFont(std::string font) {
+  if (openGL) {
     // TODO: OpenGL text
   } else {
-    ((__Window*)window)->ctx.set("font", font);
+    context.set("font", font);
   }
 }
 
-void drawText(Window* window, int x, int y, std::string text, Color color) {
-  if (((__Window*)window)->gl) {
+void drawText(int x, int y, std::string text, Color color) {
+  if (openGL) {
     // TODO: OpenGL text
   } else {
-    ((__Window*)window)->ctx.set("fillStyle", color.color);
-    ((__Window*)window)->ctx.call<void>("fillText", text, x, y);
+    context.set("fillStyle", "rgb(" + std::to_string(color.red) + ',' + std::to_string(color.green) + ',' + std::to_string(color.blue) + ',' + std::to_string(color.alpha) + ')');
+    context.call<void>("fillText", text, x, y);
   }
 }
 
-int textWidth(Window* window, std::string text) {
-  if (((__Window*)window)->gl) {
-    // TODO: OpenGL text
-    return 0;
-  } else {
-    return ((__Window*)window)->ctx.call<val>("measureText", text)["width"].as<int>();
-  }
-}
-
-int textHeight(Window* window, std::string text) {
-  if (((__Window*)window)->gl) {
+int textWidth(std::string text) {
+  if (openGL) {
     // TODO: OpenGL text
     return 0;
   } else {
-    return ((__Window*)window)->ctx.call<val>("measureText", text)["height"].as<int>();
+    return context.call<val>("measureText", text)["width"].as<int>();
+  }
+}
+
+int textHeight(std::string text) {
+  if (openGL) {
+    // TODO: OpenGL text
+    return 0;
+  } else {
+    return context.call<val>("measureText", text)["height"].as<int>();
   }
 }
 
 // Transform
-void pushTransform(Window* window) {
-  if (((__Window*)window)->gl) {
+void pushTransform() {
+  if (openGL) {
     // TODO: matrix stack
   } else {
-    ((__Window*)window)->ctx.call<void>("save");
+    context.call<void>("save");
   }
 }
 
-void popTransform(Window* window) {
-  if (((__Window*)window)->gl) {
+void popTransform() {
+  if (openGL) {
     // TODO: matrix stack
   } else {
-    ((__Window*)window)->ctx.call<void>("restore");
+    context.call<void>("restore");
   }
 }
 
-void rotate(Window* window, int x, int y, float angle) {
-  if (((__Window*)window)->gl) {
+void rotate(int x, int y, float angle) {
+  if (openGL) {
     // TODO: matrices
   } else {
-    ((__Window*)window)->ctx.call<void>("translate", x, y);
-    ((__Window*)window)->ctx.call<void>("rotate", angle);
-    ((__Window*)window)->ctx.call<void>("translate", -x, -y);
+    context.call<void>("translate", x, y);
+    context.call<void>("rotate", angle);
+    context.call<void>("translate", -x, -y);
   }
 }
 
@@ -460,8 +521,11 @@ bool isMouseButtonPressed(MouseButton button) { return (mousePressed & button) !
 bool isMouseButtonReleased(MouseButton button) { return (mouseReleased & button) != 0; }
 bool isMouseButtonHeld(MouseButton button) { return (mouseState & button) != 0; }
 
-int getMouseX(Window* window) { return ((__Window*)window)->mouseX; }
-int getMouseY(Window* window) { return ((__Window*)window)->mouseY; }
+int getMouseX() { return ((__Window*)window)->mouseX; }
+int getMouseY() { return ((__Window*)window)->mouseY; }
+
+int getMouseDeltaX() { return mouseDeltaX; }
+int getMouseDeltaY() { return mouseDeltaY; }
 
 float getScrollX() { return scrollX; }
 float getScrollY() { return scrollY; }
@@ -475,43 +539,12 @@ void nextFrame() {
     key.second &= 0b00000001;
   }
   mousePressed = mouseReleased = 0;
+  mouseDeltaX = mouseDeltaY = 0;
   scrollX = scrollY = 0;
   charPressed = '\0';
+  viewportWidth = canvas["width"].as<int>();
+  viewportHeight = canvas["height"].as<int>();
   emscripten_sleep(0);
 }
 
-// GL
-const std::string vertexShader = R"(
-    attribute vec4 vPosition;
-    attribute vec4 vTexCoord;
-    varying vec2 vPixelTexCoord;
-
-    void main() {
-      gl_Position = vPosition;
-      vPixelTexCoord = vTexCoord.xy;
-    }
-  )";
-
-const std::string fragmentShader = R"(
-    precision mediump float;
-
-    varying highp vec2 vPixelTexCoord;
-
-    uniform vec4 color;
-    uniform sampler2D texture1;
-    uniform bool textured;
-
-    void main() {
-      if(textured) {
-        gl_FragColor = texture2D(texture1, vPixelTexCoord);
-      } else {
-        gl_FragColor = color;
-      }
-    }
-  )";
-
-void setGLContext(Window* window) { emscripten_webgl_make_context_current(((__Window*)window)->glContext); }
-void loadDefaultShader() { defaultShader = loadShader(vertexShader, fragmentShader); }
-void useDefaultShader() { useShader(defaultShader); }
-Shader* getDefaultShader() { return defaultShader; }
 #endif

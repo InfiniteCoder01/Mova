@@ -1,13 +1,7 @@
 #pragma once
 
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
-#define __WINDOWS__
-#endif
-
-struct Shader;
-
 #include <string>
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__)
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #elif defined(__WINDOWS__)
@@ -15,22 +9,21 @@ struct Shader;
 #include <windows.h>
 #endif
 
-/*                    STRUCTS                    */
-struct Color {
-#ifdef __EMSCRIPTEN__
-  char color[10];
-#endif
+#include "renderer.h"
 
-  Color() = default;
-  Color(int value) : Color(value, value, value) {}
-  Color(int red, int green, int blue, int alpha = 255);
+namespace Mova {
+struct WindowData;
+struct Window {
+  Window(std::string title, Renderer* renderer = nullptr);
+  ~Window();
 
-  int red();
-  int green();
-  int blue();
-  int alpha();
+ private:
+  Renderer* renderer = nullptr;
+  WindowData* data;
 };
+}  // namespace Mova
 
+/*                    STRUCTS                    */
 struct Window {
   virtual ~Window() {}
 };
@@ -84,41 +77,34 @@ using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button,
 using ScrollCallback = void (*)(float deltaX, float deltaY);
 using KeyCallback = void (*)(Key key, char character, bool state);
 
-/*                    VARS                    */
-const Color black = Color(0), white = Color(255), grey = Color(150), red = Color(255, 0, 0), green = Color(0, 255, 0), blue = Color(0, 0, 255);
-
 /*                    FUNCTIONS                    */
-Window* createWindow(const std::string& title, bool gl = false);
-Image* createImage(int width, int height, Window* window);
-Image* loadImage(const std::string& filename, Window* window);
+Window* createWindow(const std::string& title, bool openGL = false);
+Image* createImage(int width, int height, const char* image = 0);
+Image* loadImage(const std::string& filename);
 Audio* loadAudio(const std::string& filename);
 void destroyWindow(Window* window);
 void destroyImage(Image* image);
 void destroyAudio(Audio* audio);
 
 void setContext(Window* window);
+void bindFramebuffer(GLuint framebuffer, uint32_t width = 0, uint32_t height = 0);
 
-int windowWidth(Window* window);
-int windowHeight(Window* window);
+uint32_t getViewportWidth();
+uint32_t getViewportHeight();
+void antialiasing(bool enabled);
 
-void antialiasing(Window* window, bool enabled);
+void clear(Color color = black);
+void fillRect(int x, int y, int w, int h, Color color);
+void drawImage(Image* image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
-void clear(Window* window, Color color = black);
-void fillRect(Window* window, int x, int y, int w, int h, Color color);
-void drawImage(Window* window, Image* image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
+void drawText(int x, int y, std::string text, Color color = white);
+void setFont(std::string font);
+int textWidth(std::string text);
+int textHeight(std::string text);
 
-void clear(GLuint* framebuffer, Color color = black);
-void fillRect(GLuint* framebuffer, int x, int y, int w, int h, Color color);
-void drawImage(GLuint* framebuffer, Image* image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
-
-void setFont(Window* window, std::string font);
-void drawText(Window* window, int x, int y, std::string text, Color color = white);
-int textWidth(Window* window, std::string text);
-int textHeight(Window* window, std::string text);
-
-void pushTransform(Window* window);
-void popTransform(Window* window);
-void rotate(Window* window, int x, int y, float angle);
+void pushTransform();
+void popTransform();
+void rotate(int x, int y, float angle);
 
 void playAudio(Audio* audio);
 void stopAudio(Audio* audio);
@@ -140,15 +126,19 @@ bool isMouseButtonPressed(MouseButton button);
 bool isMouseButtonReleased(MouseButton button);
 bool isMouseButtonHeld(MouseButton button);
 
-int getMouseX(Window* window);
-int getMouseY(Window* window);
+int getMouseX();
+int getMouseY();
+int getMouseDeltaX();
+int getMouseDeltaY();
 
 float getScrollX();
 float getScrollY();
 
 void nextFrame();
 
-void setGLContext(Window* window);
-void loadDefaultShader();
-void useDefaultShader();
-Shader* getDefaultShader();
+// Shader loadShaderFS(const std::string& vert, const std::string& frag) {
+//   std::ifstream vfs(vert), ffs(frag);
+//   std::string vsrc((std::istreambuf_iterator<char>(vfs)), (std::istreambuf_iterator<char>()));
+//   std::string fsrc((std::istreambuf_iterator<char>(ffs)), (std::istreambuf_iterator<char>()));
+//   return mrend::createShader(vsrc, fsrc);
+// }
