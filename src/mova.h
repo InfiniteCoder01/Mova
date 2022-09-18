@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 #if defined(__EMSCRIPTEN__)
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -10,33 +10,26 @@
 #endif
 
 #include "renderer.h"
+#include "logassert.h"
 
 namespace Mova {
+using RendererConstructor = Renderer* (*)();
 struct WindowData;
+struct ImageData;
 struct Window {
-  Window(std::string title, Renderer* renderer = nullptr);
+  Window(std::string_view title, RendererConstructor renderer = nullptr);
   ~Window();
 
- private:
-  Renderer* renderer = nullptr;
   WindowData* data;
-};
-}  // namespace Mova
-
-/*                    STRUCTS                    */
-struct Window {
-  virtual ~Window() {}
 };
 
 struct Image {
-  GLuint texture;
-  int width, height;
-  Image(int width, int height, GLuint texture = 0) : width(width), height(height), texture(texture) {}
-  virtual ~Image() {}
-};
+  Image(std::string_view filename, bool antialiasing = false);
+  Image(int width, int height, const char* content = nullptr, bool antialiasing = false);
+  ~Image();
 
-struct Audio {
-  virtual ~Audio() {}
+  int width, height;
+  ImageData* data;
 };
 
 enum MouseButton : uint8_t {
@@ -73,68 +66,79 @@ enum class Key {
 };
 // clang-format on
 
-using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
-using ScrollCallback = void (*)(float deltaX, float deltaY);
-using KeyCallback = void (*)(Key key, char character, bool state);
-
-/*                    FUNCTIONS                    */
-Window* createWindow(const std::string& title, bool openGL = false);
-Image* createImage(int width, int height, const char* image = 0);
-Image* loadImage(const std::string& filename);
-Audio* loadAudio(const std::string& filename);
-void destroyWindow(Window* window);
-void destroyImage(Image* image);
-void destroyAudio(Audio* audio);
-
-void setContext(Window* window);
-void bindFramebuffer(GLuint framebuffer, uint32_t width = 0, uint32_t height = 0);
-
-uint32_t getViewportWidth();
-uint32_t getViewportHeight();
-void antialiasing(bool enabled);
-
 void clear(Color color = black);
+void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness = 3);
 void fillRect(int x, int y, int w, int h, Color color);
-void drawImage(Image* image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
+void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
 void drawText(int x, int y, std::string text, Color color = white);
 void setFont(std::string font);
-int textWidth(std::string text);
-int textHeight(std::string text);
+uint32_t textWidth(std::string text);
+uint32_t textHeight(std::string text);
 
-void pushTransform();
-void popTransform();
-void rotate(int x, int y, float angle);
+uint32_t getViewportWidth();
+uint32_t getViewportHeight();
 
-void playAudio(Audio* audio);
-void stopAudio(Audio* audio);
+void setContext(const Window& window);
+void nextFrame();
 
 float deltaTime();
 
-// TODO: window related, is window focused
-ScrollCallback setScrollCallback(ScrollCallback callback);
-MouseCallback setMouseCallback(MouseCallback callback);
-KeyCallback setKeyCallback(KeyCallback callback);
-
-bool isKeyPressed(Key key);
-bool isKeyRepeated(Key key);
-bool isKeyReleased(Key key);
-bool isKeyHeld(Key key);
 char getCharPressed();
+bool isKeyHeld(Key key);
+bool isKeyPressed(Key key);
+bool isKeyReleased(Key key);
+bool isKeyRepeated(Key key);
 
+bool isMouseButtonHeld(MouseButton button);
 bool isMouseButtonPressed(MouseButton button);
 bool isMouseButtonReleased(MouseButton button);
-bool isMouseButtonHeld(MouseButton button);
+
+// TODO: window related, is window focused {
+// using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
+// using ScrollCallback = void (*)(float deltaX, float deltaY);
+// using KeyCallback = void (*)(Key key, char character, bool state);
+
+// ScrollCallback setScrollCallback(ScrollCallback callback);
+// MouseCallback setMouseCallback(MouseCallback callback);
+// KeyCallback setKeyCallback(KeyCallback callback);
 
 int getMouseX();
 int getMouseY();
+// TODO: }
+
 int getMouseDeltaX();
 int getMouseDeltaY();
 
 float getScrollX();
 float getScrollY();
 
-void nextFrame();
+#if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
+inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
+inline void fillRect(glm::vec2 pos, glm::vec2 size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
+inline void drawImage(Image& image, glm::vec2 pos, glm::vec2 size = glm::vec2(-1), Flip flip = FLIP_NONE, glm::vec2 srcPos = glm::vec2(0), glm::vec2 srcSize = glm::vec2(-1)) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
+inline void drawText(glm::vec2 pos, std::string text, Color color = white) { drawText(pos.x, pos.y, text, color); }
+inline glm::vec2 textSize(std::string text) { return glm::vec2(textWidth(text), textHeight(text)); }
+inline glm::vec2 getViewportSize() { return glm::vec2(getViewportWidth(), getViewportHeight()); }
+inline glm::vec2 getMousePos() { return glm::vec2(getMouseX(), getMouseY()); }
+inline glm::vec2 getMouseDelta() { return glm::vec2(getMouseDeltaX(), getMouseDeltaY()); }
+inline glm::vec2 getScroll() { return glm::vec2(getScrollX(), getScrollY()); }
+#endif
+}  // namespace Mova
+
+using MvWindow = Mova::Window;
+using MvImage = Mova::Image;
+using MvKey = Mova::Key;
+using Mova::Flip;
+using Mova::FLIP_BOTH;
+using Mova::FLIP_HORIZONTAL;
+using Mova::FLIP_NONE;
+using Mova::FLIP_VERTICAL;
+using Mova::MOUSE_LEFT;
+using Mova::MOUSE_MIDDLE;
+using Mova::MOUSE_RIGHT;
+
+// void bindFramebuffer(GLuint framebuffer, uint32_t width = 0, uint32_t height = 0);
 
 // Shader loadShaderFS(const std::string& vert, const std::string& frag) {
 //   std::ifstream vfs(vert), ffs(frag);

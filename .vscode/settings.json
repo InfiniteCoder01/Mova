@@ -66,6 +66,11 @@
         "system_error": "cpp",
         "list": "cpp",
         "fstream": "cpp",
-        "iomanip": "cpp"
-    }
+        "iomanip": "cpp",
+        "__config_site": "cpp",
+        "iterator": "cpp"
+    },
+    "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: Google, ColumnLimit: 9999, SortIncludes: false, UseTab: Never, IndentWidth: 2, TabWidth: 2, AllowShortIfStatementsOnASingleLine: AllIfsAndElse }",
+    "C_Cpp.clang_format_style": "{ BasedOnStyle: Google, ColumnLimit: 9999, SortIncludes: false, UseTab: Never, IndentWidth: 2, TabWidth: 2, AllowShortIfStatementsOnASingleLine: AllIfsAndElse }",
+    "C_Cpp.clang_format_path": ""
 }

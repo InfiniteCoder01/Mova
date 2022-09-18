@@ -43,7 +43,7 @@ const Color black = Color(0), white = Color(255), grey = Color(150), red = Color
 class Renderer {
  public:
   virtual VertexAttribArray createVertexAttribArray(const std::vector<float>& array, unsigned int elementSize = 3) = 0;
-  virtual Texture createTexture(const uint32_t width, const uint32_t height, const char* data = nullptr) = 0;
+  virtual Texture createTexture(const uint32_t width, const uint32_t height, const char* data = nullptr, bool antialiasing = false) = 0;
   virtual Shader createShader(const std::string_view& vert, const std::string_view& frag) = 0;
 
   virtual void useShader(const Shader& shader) = 0;

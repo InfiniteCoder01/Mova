@@ -19,7 +19,7 @@ const uint8_t defaultTexture[] = {255, 255, 255, 255};
 
 class OpenGLRenderer : public Renderer {
  public:
-  OpenGLRenderer() : m_DefaultTexture(createTexture(1, 1, (const char*)defaultTexture)) {}
+  OpenGLRenderer() : m_DefaultTexture(createTexture(1, 1, (const char*)defaultTexture, false)) {}
 
   VertexAttribArray createVertexAttribArray(const std::vector<float>& array, unsigned int elementSize) override {
     VertexAttribArray vertices = {.elementType = GL_FLOAT, .elementSize = elementSize, .destructor = destroyVertexAttribArray};
@@ -29,14 +29,14 @@ class OpenGLRenderer : public Renderer {
     return vertices;
   }
 
-  Texture createTexture(const uint32_t width, const uint32_t height, const char* data) override {
+  Texture createTexture(const uint32_t width, const uint32_t height, const char* data, bool antialiasing) override {
     GLuint texture;
     glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, antialiasing ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, antialiasing ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);

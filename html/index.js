@@ -1361,7 +1361,7 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  
+  6288: () => { addOnPostRun(function() { if (Module.canvas) Module.canvas.focus(); }); }
 };
 
 
@@ -4564,6 +4564,10 @@ var ASM_CONSTS = {
       HEAP8.set(array, buffer);
     }
 
+  function ___assert_fail(condition, filename, line, func) {
+      abort('Assertion failed: ' + UTF8ToString(condition) + ', at: ' + [filename ? UTF8ToString(filename) : 'unknown filename', line, func ? UTF8ToString(func) : 'unknown function']);
+    }
+
   function ___cxa_allocate_exception(size) {
       // Thrown object is prepended by exception metadata block
       return _malloc(size + 24) + 24;
@@ -5383,9 +5387,335 @@ var ASM_CONSTS = {
       });
     }
 
+  function __emscripten_date_now() {
+      return Date.now();
+    }
+
+  var nowIsMonotonic = true;;
+  function __emscripten_get_now_is_monotonic() {
+      return nowIsMonotonic;
+    }
+
+  function getTypeName(type) {
+      var ptr = ___getTypeName(type);
+      var rv = readLatin1String(ptr);
+      _free(ptr);
+      return rv;
+    }
+  function requireRegisteredType(rawType, humanName) {
+      var impl = registeredTypes[rawType];
+      if (undefined === impl) {
+          throwBindingError(humanName + " has unknown type " + getTypeName(rawType));
+      }
+      return impl;
+    }
+  function __emval_as(handle, returnType, destructorsRef) {
+      handle = Emval.toValue(handle);
+      returnType = requireRegisteredType(returnType, 'emval::as');
+      var destructors = [];
+      var rd = Emval.toHandle(destructors);
+      HEAPU32[((destructorsRef)>>2)] = rd;
+      return returnType['toWireType'](destructors, handle);
+    }
+
+  function emval_allocateDestructors(destructorsRef) {
+      var destructors = [];
+      HEAPU32[((destructorsRef)>>2)] = Emval.toHandle(destructors);
+      return destructors;
+    }
+  
+  var emval_symbols = {};
+  function getStringOrSymbol(address) {
+      var symbol = emval_symbols[address];
+      if (symbol === undefined) {
+        return readLatin1String(address);
+      }
+      return symbol;
+    }
+  
+  var emval_methodCallers = [];
+  function __emval_call_method(caller, handle, methodName, destructorsRef, args) {
+      caller = emval_methodCallers[caller];
+      handle = Emval.toValue(handle);
+      methodName = getStringOrSymbol(methodName);
+      return caller(handle, methodName, emval_allocateDestructors(destructorsRef), args);
+    }
+
+  function __emval_call_void_method(caller, handle, methodName, args) {
+      caller = emval_methodCallers[caller];
+      handle = Emval.toValue(handle);
+      methodName = getStringOrSymbol(methodName);
+      caller(handle, methodName, null, args);
+    }
+
+
+  function __emval_equals(first, second) {
+      first = Emval.toValue(first);
+      second = Emval.toValue(second);
+      return first == second;
+    }
+
+  function emval_get_global() {
+      if (typeof globalThis == 'object') {
+        return globalThis;
+      }
+      return (function(){
+        return Function;
+      })()('return this')();
+    }
+  function __emval_get_global(name) {
+      if (name===0) {
+        return Emval.toHandle(emval_get_global());
+      } else {
+        name = getStringOrSymbol(name);
+        return Emval.toHandle(emval_get_global()[name]);
+      }
+    }
+
+  function emval_addMethodCaller(caller) {
+      var id = emval_methodCallers.length;
+      emval_methodCallers.push(caller);
+      return id;
+    }
+  
+  function emval_lookupTypes(argCount, argTypes) {
+      var a = new Array(argCount);
+      for (var i = 0; i < argCount; ++i) {
+        a[i] = requireRegisteredType(HEAPU32[(((argTypes)+(i * POINTER_SIZE))>>2)],
+                                     "parameter " + i);
+      }
+      return a;
+    }
+  
+  function new_(constructor, argumentList) {
+      if (!(constructor instanceof Function)) {
+        throw new TypeError('new_ called with constructor type ' + typeof(constructor) + " which is not a function");
+      }
+      /*
+       * Previously, the following line was just:
+       *   function dummy() {};
+       * Unfortunately, Chrome was preserving 'dummy' as the object's name, even
+       * though at creation, the 'dummy' has the correct constructor name.  Thus,
+       * objects created with IMVU.new would show up in the debugger as 'dummy',
+       * which isn't very helpful.  Using IMVU.createNamedFunction addresses the
+       * issue.  Doublely-unfortunately, there's no way to write a test for this
+       * behavior.  -NRD 2013.02.22
+       */
+      var dummy = createNamedFunction(constructor.name || 'unknownFunctionName', function(){});
+      dummy.prototype = constructor.prototype;
+      var obj = new dummy;
+  
+      var r = constructor.apply(obj, argumentList);
+      return (r instanceof Object) ? r : obj;
+    }
+  
+  var emval_registeredMethods = [];
+  function __emval_get_method_caller(argCount, argTypes) {
+      var types = emval_lookupTypes(argCount, argTypes);
+      var retType = types[0];
+      var signatureName = retType.name + "_$" + types.slice(1).map(function (t) { return t.name; }).join("_") + "$";
+      var returnId = emval_registeredMethods[signatureName];
+      if (returnId !== undefined) {
+        return returnId;
+      }
+  
+      var params = ["retType"];
+      var args = [retType];
+  
+      var argsList = ""; // 'arg0, arg1, arg2, ... , argN'
+      for (var i = 0; i < argCount - 1; ++i) {
+        argsList += (i !== 0 ? ", " : "") + "arg" + i;
+        params.push("argType" + i);
+        args.push(types[1 + i]);
+      }
+  
+      var functionName = makeLegalFunctionName("methodCaller_" + signatureName);
+      var functionBody =
+          "return function " + functionName + "(handle, name, destructors, args) {\n";
+  
+      var offset = 0;
+      for (var i = 0; i < argCount - 1; ++i) {
+          functionBody +=
+          "    var arg" + i + " = argType" + i + ".readValueFromPointer(args" + (offset ? ("+"+offset) : "") + ");\n";
+          offset += types[i + 1]['argPackAdvance'];
+      }
+      functionBody +=
+          "    var rv = handle[name](" + argsList + ");\n";
+      for (var i = 0; i < argCount - 1; ++i) {
+          if (types[i + 1]['deleteObject']) {
+              functionBody +=
+              "    argType" + i + ".deleteObject(arg" + i + ");\n";
+          }
+      }
+      if (!retType.isVoid) {
+          functionBody +=
+          "    return retType.toWireType(destructors, rv);\n";
+      }
+      functionBody +=
+          "};\n";
+  
+      params.push(functionBody);
+      var invokerFunction = new_(Function, params).apply(null, args);
+      returnId = emval_addMethodCaller(invokerFunction);
+      emval_registeredMethods[signatureName] = returnId;
+      return returnId;
+    }
+
+  function __emval_get_property(handle, key) {
+      handle = Emval.toValue(handle);
+      key = Emval.toValue(key);
+      return Emval.toHandle(handle[key]);
+    }
+
+  function __emval_incref(handle) {
+      if (handle > 4) {
+        emval_handle_array[handle].refcount += 1;
+      }
+    }
+
+  function craftEmvalAllocator(argCount) {
+      /*This function returns a new function that looks like this:
+      function emval_allocator_3(constructor, argTypes, args) {
+          var argType0 = requireRegisteredType(HEAP32[(argTypes >> 2)], "parameter 0");
+          var arg0 = argType0['readValueFromPointer'](args);
+          var argType1 = requireRegisteredType(HEAP32[(argTypes >> 2) + 1], "parameter 1");
+          var arg1 = argType1['readValueFromPointer'](args + 8);
+          var argType2 = requireRegisteredType(HEAP32[(argTypes >> 2) + 2], "parameter 2");
+          var arg2 = argType2['readValueFromPointer'](args + 16);
+          var obj = new constructor(arg0, arg1, arg2);
+          return Emval.toHandle(obj);
+      } */
+      var argsList = "";
+      for (var i = 0; i < argCount; ++i) {
+        argsList += (i!==0?", ":"")+"arg"+i; // 'arg0, arg1, ..., argn'
+      }
+  
+      // The body of the generated function does not have access to enclosing
+      // scope where HEAPU64/HEAPU32/etc are defined, and we cannot pass them
+      // directly as arguments (like we do the Module object) since memory
+      // growth can cause them to be re-bound.
+      var getMemory = () => HEAPU32;
+  
+      var functionBody =
+          "return function emval_allocator_"+argCount+"(constructor, argTypes, args) {\n" +
+          "  var HEAPU32 = getMemory();\n";
+  
+      for (var i = 0; i < argCount; ++i) {
+          functionBody +=
+              "var argType"+i+" = requireRegisteredType(HEAPU32[((argTypes)>>2)], 'parameter "+i+"');\n" +
+              "var arg"+i+" = argType"+i+".readValueFromPointer(args);\n" +
+              "args += argType"+i+"['argPackAdvance'];\n" +
+              "argTypes += 4;\n";
+      }
+      functionBody +=
+          "var obj = new constructor("+argsList+");\n" +
+          "return valueToHandle(obj);\n" +
+          "}\n";
+  
+      /*jshint evil:true*/
+      return (new Function("requireRegisteredType", "Module", "valueToHandle", "getMemory" , functionBody))(
+          requireRegisteredType, Module, Emval.toHandle, getMemory);
+    }
+  
+  var emval_newers = {};
+  function __emval_new(handle, argCount, argTypes, args) {
+      handle = Emval.toValue(handle);
+  
+      var newer = emval_newers[argCount];
+      if (!newer) {
+        newer = craftEmvalAllocator(argCount);
+        emval_newers[argCount] = newer;
+      }
+  
+      return newer(handle, argTypes, args);
+    }
+
+  function __emval_new_cstring(v) {
+      return Emval.toHandle(getStringOrSymbol(v));
+    }
+
+  function runDestructors(destructors) {
+      while (destructors.length) {
+        var ptr = destructors.pop();
+        var del = destructors.pop();
+        del(ptr);
+      }
+    }
+  function __emval_run_destructors(handle) {
+      var destructors = Emval.toValue(handle);
+      runDestructors(destructors);
+      __emval_decref(handle);
+    }
+
+  function __emval_set_property(handle, key, value) {
+      handle = Emval.toValue(handle);
+      key = Emval.toValue(key);
+      value = Emval.toValue(value);
+      handle[key] = value;
+    }
+
+  function __emval_take_value(type, arg) {
+      type = requireRegisteredType(type, '_emval_take_value');
+      var v = type['readValueFromPointer'](arg);
+      return Emval.toHandle(v);
+    }
 
   function _abort() {
       abort('native code called abort()');
+    }
+
+  var readAsmConstArgsArray = [];
+  function readAsmConstArgs(sigPtr, buf) {
+      // Nobody should have mutated _readAsmConstArgsArray underneath us to be something else than an array.
+      assert(Array.isArray(readAsmConstArgsArray));
+      // The input buffer is allocated on the stack, so it must be stack-aligned.
+      assert(buf % 16 == 0);
+      readAsmConstArgsArray.length = 0;
+      var ch;
+      // Most arguments are i32s, so shift the buffer pointer so it is a plain
+      // index into HEAP32.
+      buf >>= 2;
+      while (ch = HEAPU8[sigPtr++]) {
+        var chr = String.fromCharCode(ch);
+        var validChars = ['d', 'f', 'i'];
+        assert(validChars.includes(chr), 'Invalid character ' + ch + '("' + chr + '") in readAsmConstArgs! Use only [' + validChars + '], and do not specify "v" for void return argument.');
+        // Floats are always passed as doubles, and doubles and int64s take up 8
+        // bytes (two 32-bit slots) in memory, align reads to these:
+        buf += (ch != 105/*i*/) & buf;
+        readAsmConstArgsArray.push(
+          ch == 105/*i*/ ? HEAP32[buf] :
+         HEAPF64[buf++ >> 1]
+        );
+        ++buf;
+      }
+      return readAsmConstArgsArray;
+    }
+  function _emscripten_asm_const_int(code, sigPtr, argbuf) {
+      var args = readAsmConstArgs(sigPtr, argbuf);
+      if (!ASM_CONSTS.hasOwnProperty(code)) abort('No EM_ASM constant found at address ' + code);
+      return ASM_CONSTS[code].apply(null, args);
+    }
+
+
+  function _emscripten_get_preloaded_image_data(path, w, h) {
+      if ((path | 0) === path) path = UTF8ToString(path);
+  
+      path = PATH_FS.resolve(path);
+  
+      var canvas = /** @type {HTMLCanvasElement} */(preloadedImages[path]);
+      if (canvas) {
+        var ctx = canvas.getContext("2d");
+        var image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var buf = _malloc(canvas.width * canvas.height * 4);
+  
+        HEAPU8.set(image.data, buf);
+  
+        HEAP32[((w)>>2)] = canvas.width;
+        HEAP32[((h)>>2)] = canvas.height;
+        return buf;
+      }
+  
+      return 0;
     }
 
   function _emscripten_memcpy_big(dest, src, num) {
@@ -5464,6 +5794,287 @@ var ASM_CONSTS = {
       }
       err('Failed to grow the heap from ' + oldSize + ' bytes to ' + newSize + ' bytes, not enough memory!');
       return false;
+    }
+
+  var JSEvents = {inEventHandler:0,removeAllEventListeners:function() {
+        for (var i = JSEvents.eventHandlers.length-1; i >= 0; --i) {
+          JSEvents._removeHandler(i);
+        }
+        JSEvents.eventHandlers = [];
+        JSEvents.deferredCalls = [];
+      },registerRemoveEventListeners:function() {
+        if (!JSEvents.removeEventListenersRegistered) {
+          __ATEXIT__.push(JSEvents.removeAllEventListeners);
+          JSEvents.removeEventListenersRegistered = true;
+        }
+      },deferredCalls:[],deferCall:function(targetFunction, precedence, argsList) {
+        function arraysHaveEqualContent(arrA, arrB) {
+          if (arrA.length != arrB.length) return false;
+  
+          for (var i in arrA) {
+            if (arrA[i] != arrB[i]) return false;
+          }
+          return true;
+        }
+        // Test if the given call was already queued, and if so, don't add it again.
+        for (var i in JSEvents.deferredCalls) {
+          var call = JSEvents.deferredCalls[i];
+          if (call.targetFunction == targetFunction && arraysHaveEqualContent(call.argsList, argsList)) {
+            return;
+          }
+        }
+        JSEvents.deferredCalls.push({
+          targetFunction: targetFunction,
+          precedence: precedence,
+          argsList: argsList
+        });
+  
+        JSEvents.deferredCalls.sort(function(x,y) { return x.precedence < y.precedence; });
+      },removeDeferredCalls:function(targetFunction) {
+        for (var i = 0; i < JSEvents.deferredCalls.length; ++i) {
+          if (JSEvents.deferredCalls[i].targetFunction == targetFunction) {
+            JSEvents.deferredCalls.splice(i, 1);
+            --i;
+          }
+        }
+      },canPerformEventHandlerRequests:function() {
+        return JSEvents.inEventHandler && JSEvents.currentEventHandler.allowsDeferredCalls;
+      },runDeferredCalls:function() {
+        if (!JSEvents.canPerformEventHandlerRequests()) {
+          return;
+        }
+        for (var i = 0; i < JSEvents.deferredCalls.length; ++i) {
+          var call = JSEvents.deferredCalls[i];
+          JSEvents.deferredCalls.splice(i, 1);
+          --i;
+          call.targetFunction.apply(null, call.argsList);
+        }
+      },eventHandlers:[],removeAllHandlersOnTarget:function(target, eventTypeString) {
+        for (var i = 0; i < JSEvents.eventHandlers.length; ++i) {
+          if (JSEvents.eventHandlers[i].target == target && 
+            (!eventTypeString || eventTypeString == JSEvents.eventHandlers[i].eventTypeString)) {
+             JSEvents._removeHandler(i--);
+           }
+        }
+      },_removeHandler:function(i) {
+        var h = JSEvents.eventHandlers[i];
+        h.target.removeEventListener(h.eventTypeString, h.eventListenerFunc, h.useCapture);
+        JSEvents.eventHandlers.splice(i, 1);
+      },registerOrRemoveHandler:function(eventHandler) {
+        var jsEventHandler = function jsEventHandler(event) {
+          // Increment nesting count for the event handler.
+          ++JSEvents.inEventHandler;
+          JSEvents.currentEventHandler = eventHandler;
+          // Process any old deferred calls the user has placed.
+          JSEvents.runDeferredCalls();
+          // Process the actual event, calls back to user C code handler.
+          eventHandler.handlerFunc(event);
+          // Process any new deferred calls that were placed right now from this event handler.
+          JSEvents.runDeferredCalls();
+          // Out of event handler - restore nesting count.
+          --JSEvents.inEventHandler;
+        };
+        
+        if (eventHandler.callbackfunc) {
+          eventHandler.eventListenerFunc = jsEventHandler;
+          eventHandler.target.addEventListener(eventHandler.eventTypeString, jsEventHandler, eventHandler.useCapture);
+          JSEvents.eventHandlers.push(eventHandler);
+          JSEvents.registerRemoveEventListeners();
+        } else {
+          for (var i = 0; i < JSEvents.eventHandlers.length; ++i) {
+            if (JSEvents.eventHandlers[i].target == eventHandler.target
+             && JSEvents.eventHandlers[i].eventTypeString == eventHandler.eventTypeString) {
+               JSEvents._removeHandler(i--);
+             }
+          }
+        }
+      },getNodeNameForTarget:function(target) {
+        if (!target) return '';
+        if (target == window) return '#window';
+        if (target == screen) return '#screen';
+        return (target && target.nodeName) ? target.nodeName : '';
+      },fullscreenEnabled:function() {
+        return document.fullscreenEnabled
+        // Safari 13.0.3 on macOS Catalina 10.15.1 still ships with prefixed webkitFullscreenEnabled.
+        // TODO: If Safari at some point ships with unprefixed version, update the version check above.
+        || document.webkitFullscreenEnabled
+         ;
+      }};
+  
+  function maybeCStringToJsString(cString) {
+      // "cString > 2" checks if the input is a number, and isn't of the special
+      // values we accept here, EMSCRIPTEN_EVENT_TARGET_* (which map to 0, 1, 2).
+      // In other words, if cString > 2 then it's a pointer to a valid place in
+      // memory, and points to a C string.
+      return cString > 2 ? UTF8ToString(cString) : cString;
+    }
+  
+  var specialHTMLTargets = [0, typeof document != 'undefined' ? document : 0, typeof window != 'undefined' ? window : 0];
+  function findEventTarget(target) {
+      target = maybeCStringToJsString(target);
+      var domElement = specialHTMLTargets[target] || (typeof document != 'undefined' ? document.querySelector(target) : undefined);
+      return domElement;
+    }
+  function registerKeyEventCallback(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
+      if (!JSEvents.keyEvent) JSEvents.keyEvent = _malloc( 176 );
+  
+      var keyEventHandlerFunc = function(e) {
+        assert(e);
+  
+        var keyEventData = JSEvents.keyEvent;
+        HEAPF64[((keyEventData)>>3)] = e.timeStamp;
+  
+        var idx = keyEventData >> 2;
+  
+        HEAP32[idx + 2] = e.location;
+        HEAP32[idx + 3] = e.ctrlKey;
+        HEAP32[idx + 4] = e.shiftKey;
+        HEAP32[idx + 5] = e.altKey;
+        HEAP32[idx + 6] = e.metaKey;
+        HEAP32[idx + 7] = e.repeat;
+        HEAP32[idx + 8] = e.charCode;
+        HEAP32[idx + 9] = e.keyCode;
+        HEAP32[idx + 10] = e.which;
+        stringToUTF8(e.key || '', keyEventData + 44, 32);
+        stringToUTF8(e.code || '', keyEventData + 76, 32);
+        stringToUTF8(e.char || '', keyEventData + 108, 32);
+        stringToUTF8(e.locale || '', keyEventData + 140, 32);
+  
+        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, keyEventData, userData)) e.preventDefault();
+      };
+  
+      var eventHandler = {
+        target: findEventTarget(target),
+        allowsDeferredCalls: true,
+        eventTypeString: eventTypeString,
+        callbackfunc: callbackfunc,
+        handlerFunc: keyEventHandlerFunc,
+        useCapture: useCapture
+      };
+      JSEvents.registerOrRemoveHandler(eventHandler);
+    }
+  function _emscripten_set_keydown_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
+      registerKeyEventCallback(target, userData, useCapture, callbackfunc, 2, "keydown", targetThread);
+      return 0;
+    }
+
+  function _emscripten_set_keyup_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
+      registerKeyEventCallback(target, userData, useCapture, callbackfunc, 3, "keyup", targetThread);
+      return 0;
+    }
+
+  function getBoundingClientRect(e) {
+      return specialHTMLTargets.indexOf(e) < 0 ? e.getBoundingClientRect() : {'left':0,'top':0};
+    }
+  function fillMouseEventData(eventStruct, e, target) {
+      assert(eventStruct % 4 == 0);
+      HEAPF64[((eventStruct)>>3)] = e.timeStamp;
+      var idx = eventStruct >> 2;
+      HEAP32[idx + 2] = e.screenX;
+      HEAP32[idx + 3] = e.screenY;
+      HEAP32[idx + 4] = e.clientX;
+      HEAP32[idx + 5] = e.clientY;
+      HEAP32[idx + 6] = e.ctrlKey;
+      HEAP32[idx + 7] = e.shiftKey;
+      HEAP32[idx + 8] = e.altKey;
+      HEAP32[idx + 9] = e.metaKey;
+      HEAP16[idx*2 + 20] = e.button;
+      HEAP16[idx*2 + 21] = e.buttons;
+  
+      HEAP32[idx + 11] = e["movementX"]
+        ;
+  
+      HEAP32[idx + 12] = e["movementY"]
+        ;
+  
+      var rect = getBoundingClientRect(target);
+      HEAP32[idx + 13] = e.clientX - rect.left;
+      HEAP32[idx + 14] = e.clientY - rect.top;
+  
+    }
+  function registerMouseEventCallback(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
+      if (!JSEvents.mouseEvent) JSEvents.mouseEvent = _malloc( 72 );
+      target = findEventTarget(target);
+  
+      var mouseEventHandlerFunc = function(ev) {
+        var e = ev || event;
+  
+        // TODO: Make this access thread safe, or this could update live while app is reading it.
+        fillMouseEventData(JSEvents.mouseEvent, e, target);
+  
+        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, JSEvents.mouseEvent, userData)) e.preventDefault();
+      };
+  
+      var eventHandler = {
+        target: target,
+        allowsDeferredCalls: eventTypeString != 'mousemove' && eventTypeString != 'mouseenter' && eventTypeString != 'mouseleave', // Mouse move events do not allow fullscreen/pointer lock requests to be handled in them!
+        eventTypeString: eventTypeString,
+        callbackfunc: callbackfunc,
+        handlerFunc: mouseEventHandlerFunc,
+        useCapture: useCapture
+      };
+      JSEvents.registerOrRemoveHandler(eventHandler);
+    }
+  function _emscripten_set_mousedown_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
+      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 5, "mousedown", targetThread);
+      return 0;
+    }
+
+  function _emscripten_set_mousemove_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
+      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 8, "mousemove", targetThread);
+      return 0;
+    }
+
+  function _emscripten_set_mouseup_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
+      registerMouseEventCallback(target, userData, useCapture, callbackfunc, 6, "mouseup", targetThread);
+      return 0;
+    }
+
+  function registerWheelEventCallback(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
+      if (!JSEvents.wheelEvent) JSEvents.wheelEvent = _malloc( 104 );
+  
+      // The DOM Level 3 events spec event 'wheel'
+      var wheelHandlerFunc = function(ev) {
+        var e = ev || event;
+        var wheelEvent = JSEvents.wheelEvent;
+        fillMouseEventData(wheelEvent, e, target);
+        HEAPF64[(((wheelEvent)+(72))>>3)] = e["deltaX"];
+        HEAPF64[(((wheelEvent)+(80))>>3)] = e["deltaY"];
+        HEAPF64[(((wheelEvent)+(88))>>3)] = e["deltaZ"];
+        HEAP32[(((wheelEvent)+(96))>>2)] = e["deltaMode"];
+        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, wheelEvent, userData)) e.preventDefault();
+      };
+  
+      var eventHandler = {
+        target: target,
+        allowsDeferredCalls: true,
+        eventTypeString: eventTypeString,
+        callbackfunc: callbackfunc,
+        handlerFunc: wheelHandlerFunc,
+        useCapture: useCapture
+      };
+      JSEvents.registerOrRemoveHandler(eventHandler);
+    }
+  function _emscripten_set_wheel_callback_on_thread(target, userData, useCapture, callbackfunc, targetThread) {
+      target = findEventTarget(target);
+      if (typeof target.onwheel != 'undefined') {
+        registerWheelEventCallback(target, userData, useCapture, callbackfunc, 9, "wheel", targetThread);
+        return 0;
+      } else {
+        return -1;
+      }
+    }
+
+  function _emscripten_set_window_title(title) {
+      setWindowTitle(UTF8ToString(title));
+    }
+
+  function _emscripten_sleep(ms) {
+      // emscripten_sleep() does not return a value, but we still need a |return|
+      // here for stack switching support (ASYNCIFY=2). In that mode this function
+      // returns a Promise instead of nothing, and that Promise is what tells the
+      // wasm VM to pause the stack.
+      return Asyncify.handleSleep((wakeUp) => safeSetTimeout(wakeUp, ms));
     }
 
   function _fd_close(fd) {
@@ -6421,6 +7032,7 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
 var asmLibraryArg = {
+  "__assert_fail": ___assert_fail,
   "__cxa_allocate_exception": ___cxa_allocate_exception,
   "__cxa_throw": ___cxa_throw,
   "_embind_register_bigint": __embind_register_bigint,
@@ -6432,10 +7044,36 @@ var asmLibraryArg = {
   "_embind_register_std_string": __embind_register_std_string,
   "_embind_register_std_wstring": __embind_register_std_wstring,
   "_embind_register_void": __embind_register_void,
+  "_emscripten_date_now": __emscripten_date_now,
+  "_emscripten_get_now_is_monotonic": __emscripten_get_now_is_monotonic,
+  "_emval_as": __emval_as,
+  "_emval_call_method": __emval_call_method,
+  "_emval_call_void_method": __emval_call_void_method,
   "_emval_decref": __emval_decref,
+  "_emval_equals": __emval_equals,
+  "_emval_get_global": __emval_get_global,
+  "_emval_get_method_caller": __emval_get_method_caller,
+  "_emval_get_property": __emval_get_property,
+  "_emval_incref": __emval_incref,
+  "_emval_new": __emval_new,
+  "_emval_new_cstring": __emval_new_cstring,
+  "_emval_run_destructors": __emval_run_destructors,
+  "_emval_set_property": __emval_set_property,
+  "_emval_take_value": __emval_take_value,
   "abort": _abort,
+  "emscripten_asm_const_int": _emscripten_asm_const_int,
+  "emscripten_get_now": _emscripten_get_now,
+  "emscripten_get_preloaded_image_data": _emscripten_get_preloaded_image_data,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
+  "emscripten_set_keydown_callback_on_thread": _emscripten_set_keydown_callback_on_thread,
+  "emscripten_set_keyup_callback_on_thread": _emscripten_set_keyup_callback_on_thread,
+  "emscripten_set_mousedown_callback_on_thread": _emscripten_set_mousedown_callback_on_thread,
+  "emscripten_set_mousemove_callback_on_thread": _emscripten_set_mousemove_callback_on_thread,
+  "emscripten_set_mouseup_callback_on_thread": _emscripten_set_mouseup_callback_on_thread,
+  "emscripten_set_wheel_callback_on_thread": _emscripten_set_wheel_callback_on_thread,
+  "emscripten_set_window_title": _emscripten_set_window_title,
+  "emscripten_sleep": _emscripten_sleep,
   "fd_close": _fd_close,
   "fd_seek": _fd_seek,
   "fd_write": _fd_write,
@@ -6508,16 +7146,25 @@ var ___cxa_is_pointer_type = Module["___cxa_is_pointer_type"] = createExportWrap
 var dynCall_vi = Module["dynCall_vi"] = createExportWrapper("dynCall_vi");
 
 /** @type {function(...*):?} */
+var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
+
+/** @type {function(...*):?} */
+var dynCall_iiiii = Module["dynCall_iiiii"] = createExportWrapper("dynCall_iiiii");
+
+/** @type {function(...*):?} */
 var dynCall_ii = Module["dynCall_ii"] = createExportWrapper("dynCall_ii");
 
 /** @type {function(...*):?} */
 var dynCall_v = Module["dynCall_v"] = createExportWrapper("dynCall_v");
 
 /** @type {function(...*):?} */
-var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
+var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
 
 /** @type {function(...*):?} */
-var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
+var dynCall_iidiiii = Module["dynCall_iidiiii"] = createExportWrapper("dynCall_iidiiii");
+
+/** @type {function(...*):?} */
+var dynCall_vii = Module["dynCall_vii"] = createExportWrapper("dynCall_vii");
 
 /** @type {function(...*):?} */
 var dynCall_viiiiii = Module["dynCall_viiiiii"] = createExportWrapper("dynCall_viiiiii");
@@ -6902,7 +7549,6 @@ var missingLibrarySymbols = [
   'getHostByName',
   'traverseStack',
   'convertPCtoSourceLocation',
-  'readAsmConstArgs',
   'mainThreadEM_ASM',
   'jstoi_q',
   'jstoi_s',
@@ -6929,14 +7575,7 @@ var missingLibrarySymbols = [
   'formatString',
   'getSocketFromFD',
   'getSocketAddress',
-  'registerKeyEventCallback',
-  'maybeCStringToJsString',
-  'findEventTarget',
   'findCanvasEventTarget',
-  'getBoundingClientRect',
-  'fillMouseEventData',
-  'registerMouseEventCallback',
-  'registerWheelEventCallback',
   'registerUiEventCallback',
   'registerFocusEventCallback',
   'fillDeviceOrientationEventData',
@@ -7007,12 +7646,8 @@ var missingLibrarySymbols = [
   'getInheritedInstance',
   'getInheritedInstanceCount',
   'getLiveInheritedInstances',
-  'getTypeName',
   'heap32VectorToArray',
-  'requireRegisteredType',
   'enumReadValueFromPointer',
-  'runDestructors',
-  'new_',
   'craftInvokerFunction',
   'embind__requireFunction',
   'genericPointerToWireType',
@@ -7044,12 +7679,6 @@ var missingLibrarySymbols = [
   'downcastPointer',
   'upcastPointer',
   'validateThis',
-  'getStringOrSymbol',
-  'craftEmvalAllocator',
-  'emval_get_global',
-  'emval_lookupTypes',
-  'emval_allocateDestructors',
-  'emval_addMethodCaller',
 ];
 missingLibrarySymbols.forEach(missingLibrarySymbol)
 
