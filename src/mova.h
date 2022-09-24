@@ -1,13 +1,6 @@
 #pragma once
 
 #include <string_view>
-#if defined(__EMSCRIPTEN__)
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-#elif defined(__WINDOWS__)
-#include <GL/gl.h>
-#include <windows.h>
-#endif
 
 #include "renderer.h"
 #include "logassert.h"
@@ -24,9 +17,12 @@ struct Window {
 };
 
 struct Image {
+  Image() = default;
   Image(std::string_view filename, bool antialiasing = false);
   Image(int width, int height, const char* content = nullptr, bool antialiasing = false);
   ~Image();
+
+  Texture asTexture(bool tiling = false);
 
   int width, height;
   ImageData* data;
@@ -94,24 +90,22 @@ bool isMouseButtonHeld(MouseButton button);
 bool isMouseButtonPressed(MouseButton button);
 bool isMouseButtonReleased(MouseButton button);
 
-// TODO: window related, is window focused {
-// using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
-// using ScrollCallback = void (*)(float deltaX, float deltaY);
-// using KeyCallback = void (*)(Key key, char character, bool state);
-
-// ScrollCallback setScrollCallback(ScrollCallback callback);
-// MouseCallback setMouseCallback(MouseCallback callback);
-// KeyCallback setKeyCallback(KeyCallback callback);
-
 int getMouseX();
 int getMouseY();
-// TODO: }
 
 int getMouseDeltaX();
 int getMouseDeltaY();
 
 float getScrollX();
 float getScrollY();
+
+using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
+using ScrollCallback = void (*)(float deltaX, float deltaY);
+using KeyCallback = void (*)(Key key, char character, bool state);
+
+void setScrollCallback(ScrollCallback callback);
+void setMouseCallback(MouseCallback callback);
+void setKeyCallback(KeyCallback callback);
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
 inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
@@ -137,12 +131,6 @@ using Mova::FLIP_VERTICAL;
 using Mova::MOUSE_LEFT;
 using Mova::MOUSE_MIDDLE;
 using Mova::MOUSE_RIGHT;
+using Mova::MouseButton;
 
 // void bindFramebuffer(GLuint framebuffer, uint32_t width = 0, uint32_t height = 0);
-
-// Shader loadShaderFS(const std::string& vert, const std::string& frag) {
-//   std::ifstream vfs(vert), ffs(frag);
-//   std::string vsrc((std::istreambuf_iterator<char>(vfs)), (std::istreambuf_iterator<char>()));
-//   std::string fsrc((std::istreambuf_iterator<char>(ffs)), (std::istreambuf_iterator<char>()));
-//   return mrend::createShader(vsrc, fsrc);
-// }

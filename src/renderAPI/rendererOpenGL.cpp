@@ -19,17 +19,17 @@ const uint8_t defaultTexture[] = {255, 255, 255, 255};
 
 class OpenGLRenderer : public Renderer {
  public:
-  OpenGLRenderer() : m_DefaultTexture(createTexture(1, 1, (const char*)defaultTexture, false)) {}
+  OpenGLRenderer() : m_DefaultTexture(createTexture(1, 1, (const char*)defaultTexture, false, false)) {}
 
   VertexAttribArray createVertexAttribArray(const std::vector<float>& array, unsigned int elementSize) override {
-    VertexAttribArray vertices = {.elementType = GL_FLOAT, .elementSize = elementSize, .destructor = destroyVertexAttribArray};
+    VertexAttribArray vertices = VertexAttribArray(GL_FLOAT, elementSize, destroyVertexAttribArray);
     glGenBuffers(1, &vertices.ptr);
     glBindBuffer(GL_ARRAY_BUFFER, vertices.ptr);
     glBufferData(GL_ARRAY_BUFFER, array.size() * sizeof(float), array.data(), GL_STATIC_DRAW);
     return vertices;
   }
 
-  Texture createTexture(const uint32_t width, const uint32_t height, const char* data, bool antialiasing) override {
+  Texture createTexture(const uint32_t width, const uint32_t height, const char* data, bool antialiasing, bool tiling) override {
     GLuint texture;
     glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
@@ -37,10 +37,10 @@ class OpenGLRenderer : public Renderer {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, antialiasing ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, antialiasing ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, tiling ? GL_REPEAT : GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, tiling ? GL_REPEAT : GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
-    return Texture{.ptr = texture, .destructor = destroyTexture};
+    return Texture(texture, destroyTexture);
   }
 
   Shader createShader(const std::string_view& vert, const std::string_view& frag) override {
@@ -63,8 +63,21 @@ class OpenGLRenderer : public Renderer {
       fprintf(stderr, "An error occurred linking program: %s\n", log);
     }
 
-    return Shader{.program = program, .destructor = destroyShader};
+    return Shader(program, destroyShader);
   }
+
+  void drawToTexture(const Texture& texture) override {
+    static unsigned int fbo = 0;
+    if (!fbo) {
+      glGenFramebuffers(1, &fbo);
+      MV_ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "Error creating framebuffer!");
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.ptr, 0);
+  }
+
+  void drawToScreen() override { glBindFramebuffer(GL_FRAMEBUFFER, 0); }
 
   void useShader(const Shader& shader) override {
     m_Shader = &shader;
@@ -78,17 +91,24 @@ class OpenGLRenderer : public Renderer {
     setShaderColor(*m_Shader, "u_Color", white);
   }
 
+  void setViewport(int x, int y, int width, int height) override { glViewport(x, y, width, height); }
+
+  void depth(bool enabled) override {
+    if (enabled) glEnable(GL_DEPTH_TEST);
+    else glDisable(GL_DEPTH_TEST);
+  }
+
   void clear(Color color) override { glClearColor(color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0); }
 
-  void draw(const std::initializer_list<const VertexAttribArray*>& arrays, const unsigned int count, int type) override {
+  void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, int type) override {
     if (type == -1) type = GL_TRIANGLES;
     setVertexAttribArrays(arrays);
     glDrawArrays(type, 0, count);
   }
 
-  void draw(const std::initializer_list<const VertexAttribArray*>& attrs, const unsigned int count, Color color, int type) override { draw(attrs, count, m_DefaultTexture, color, type); }
+  void draw(const std::vector<const VertexAttribArray*>& attrs, const unsigned int count, Color color, int type) override { draw(attrs, count, m_DefaultTexture, color, type); }
 
-  void draw(const std::initializer_list<const VertexAttribArray*>& attrs, const unsigned int count, const Texture& texture, Color tint, int type) override {
+  void draw(const std::vector<const VertexAttribArray*>& attrs, const unsigned int count, const Texture& texture, Color tint, int type) override {
     setTexture(texture);
     setShaderColor(*m_Shader, "u_Color", tint);
     draw(attrs, count, type);
@@ -97,6 +117,10 @@ class OpenGLRenderer : public Renderer {
   void setShaderVec2(const Shader& shader, const std::string_view& name, float x, float y) override { glUniform2f(glGetUniformLocation(shader.program, name.data()), x, y); }
   void setShaderVec3(const Shader& shader, const std::string_view& name, float x, float y, float z) override { glUniform3f(glGetUniformLocation(shader.program, name.data()), x, y, z); }
   void setShaderVec4(const Shader& shader, const std::string_view& name, float x, float y, float z, float w) override { glUniform4f(glGetUniformLocation(shader.program, name.data()), x, y, z, w); }
+
+  void setShaderMat2(const Shader& shader, const std::string_view& name, float* mat) override { glUniformMatrix2fv(glGetUniformLocation(shader.program, name.data()), 1, GL_FALSE, mat); }
+  void setShaderMat3(const Shader& shader, const std::string_view& name, float* mat) override { glUniformMatrix3fv(glGetUniformLocation(shader.program, name.data()), 1, GL_FALSE, mat); }
+  void setShaderMat4(const Shader& shader, const std::string_view& name, float* mat) override { glUniformMatrix4fv(glGetUniformLocation(shader.program, name.data()), 1, GL_FALSE, mat); }
 
   void setShaderInt(const Shader& shader, const std::string_view& name, int value) override { glUniform1i(glGetUniformLocation(shader.program, name.data()), value); }
   void setShaderBool(const Shader& shader, const std::string_view& name, bool value) override { glUniform1i(glGetUniformLocation(shader.program, name.data()), (int)value); }
@@ -113,7 +137,7 @@ class OpenGLRenderer : public Renderer {
     return 0;
   }
 
-  void setVertexAttribArrays(const std::initializer_list<const VertexAttribArray*>& arrays) {
+  void setVertexAttribArrays(const std::vector<const VertexAttribArray*>& arrays) {
     int i = 0;
     for (int j = 0; j < MAX_VERTEX_ATTRIBS; j++) glDisableVertexAttribArray(j);
     MV_ASSERT(arrays.size() < MAX_VERTEX_ATTRIBS, "Too many vertex attributes (%zu)!", arrays.size());

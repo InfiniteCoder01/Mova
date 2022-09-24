@@ -7,7 +7,8 @@
                 "D:/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/",
                 "D:/emsdk/upstream/emscripten/cache/sysroot/include",
                 "D:/Dev/C++/LIB/imgui",
-                "D:/Dev/C++/LIB/Mova/src"
+                "D:/Dev/C++/LIB/Mova/src",
+                "D:/Dev/C++/LIB/glm/"
             ],
             "defines": [
                 "_DEBUG",

@@ -1,5 +1,7 @@
 CXX := em++
-FILES := examples/sample.cpp
+FILES := examples/sample.cpp # Change to renderer.cpp
+
+GLM := D:/Dev/C++/LIB/glm
 
 ImGUI := D:/Dev/C++/LIB/imgui
 ImGUI_OBJ := $(or $(word 1,$(wildcard build/ImGUI/*.o)),imgui)
@@ -7,7 +9,7 @@ ImGUI_OBJ := $(or $(word 1,$(wildcard build/ImGUI/*.o)),imgui)
 Mova := D:/Dev/C++/LIB/Mova/src
 Mova_OBJ := $(or $(word 1,$(wildcard build/Mova/*.o)), mova)
 
-Include := -I $(ImGUI) -I $(Mova)
+Include := -I $(ImGUI) -I $(Mova) -I $(GLM)
 Flags := -D IMGUI_IMPL_OPENGL_ES2
 Linker := -s ASYNCIFY -s WASM=1 -s MAX_WEBGL_VERSION=2 -s ALLOW_MEMORY_GROWTH=1 --bind --use-preload-plugins
 Settings := -o html/index.html --shell-file html/basic_template.html --preload-file test.png

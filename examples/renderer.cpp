@@ -1,5 +1,6 @@
 #include <mova.h>
 #include <renderer.h>
+#include <emscripten.h>
 // #include <imguiImpl.h>
 
 const std::string vertexShader = R"(
@@ -27,24 +28,36 @@ const std::string fragmentShader = R"(
 )";
 
 int main() {
-  MvWindow window = MvWindow("Test", openGLRenderer);
-  // ImGui_ImplMova_Init();
+  MvWindow window = MvWindow("Renderer sample", openGLRenderer);
+
+  VertexAttribArray triVertices = renderer->createVertexAttribArray({-0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.5f, 0.0f}, 3);
+  //                                                                                                                           ^ Num of numbers per vertex, optional and 3 by default
 
   Shader shader = renderer->createShader(vertexShader, fragmentShader);
   renderer->useShader(shader);
-  Texture tex = MvImage("test.png").asTexture();
-  renderer->setTexture(tex);
+  Texture tex = MvImage("test.png").asTexture(false/*tiling, false by default*/); // renderer->createTexture(uint32_t width, uint32_t height, const char* data = nullptr, bool antialiasing = false, bool tiling = false)
 
-  while (!Mova::isKeyPressed(Key::Escape)) {
-    // ImGui_ImplMova_NewFrame(window);
-    clear(); // All standard Mova functions are supported (Will be)
-    // renderer->draw({&triVertices}, 3);
-    // renderer->draw({&reVertices}, 6);
-    // ImGui::Begin("Test");
-    // ImGui::Image((ImTextureID)tex.ptr, ImVec2(100, 100));
-    // ImGui::End();
-    renderer->drawRect(-1, -1, 2, 2, 0, 1, 1, 0);
-    // ImGui_ImplMova_Render();
+  while (!Mova::isKeyPressed(MvKey::Escape)) {
+    renderer->setViewport(0, 0, Mova::getViewportWidth(), Mova::getViewportHeight());
+    Mova::clear();  // All standard Mova functions are supported (Will be)
+    renderer->setTexture(tex);
+    renderer->drawRect(-1, -1, 2, 2, 0, 1, 1, 0); // Fill's cleared screen with image
+    /*
+    void drawRect(float x, float y, float w, float h, Color color);
+    void drawRect(float x, float y, float w, float h, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1); // Assumes, that texture is already bound via renderer->setTexture
+    void drawRect(float x, float y, float w, float h, const Texture& texture, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1, Color tint = white);
+    */
+    // Vertex attributes, you can pass uv's seacond
+    //                   V
+    renderer->draw({&triVertices}, 3, red); // Warn: reset's texture
+    // renderer->draw({&triVertices}, 3); // Assumes, that texture is already bound via renderer->setTexture
+    // renderer->draw({&triVertices}, 3, texture, tint /*tint is optional, white by default*/);
+    Mova::nextFrame();
   }
   // ImGui_ImplMova_Shutdown();
+  /*
+  There is also:
+  void drawToTexture(const Texture& texture);
+  void drawToScreen();
+  */
 }
