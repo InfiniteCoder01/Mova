@@ -47,7 +47,8 @@ struct WindowData {
 };
 
 struct ImageData {
-  bool antialiasing, immContent = false;
+  Texture texture;
+  bool antialiasing, immContent = false, textured = false;
   const char* content;
   val JSimage;
 };
@@ -118,8 +119,19 @@ uint32_t textHeight(std::string text) {
   return 0;
 }
 
-uint32_t getViewportWidth() { return context->canvas["width"].as<uint32_t>(); }
-uint32_t getViewportHeight() { return context->canvas["height"].as<uint32_t>(); }
+uint32_t getViewportWidth() {
+  if (renderer->getTargetWidth()) {
+    return renderer->getTargetWidth();
+  }
+  return context->canvas["width"].as<uint32_t>();
+}
+
+uint32_t getViewportHeight() {
+  if (renderer->getTargetHeight()) {
+    return renderer->getTargetHeight();
+  }
+  return context->canvas["height"].as<uint32_t>();
+}
 
 void setContext(const Window& window) {
   context = window.data;
@@ -229,7 +241,13 @@ Image::~Image() {
   }
 }
 
-Texture Image::asTexture(bool tiling) { return renderer->createTexture(width, height, data->content, data->antialiasing, tiling); }
+Texture Image::asTexture(bool tiling) {
+  if (!data->textured) {
+    data->texture = renderer->createTexture(width, height, data->content, data->antialiasing, tiling);
+    data->textured = true;
+  }
+  return data->texture;
+}
 
 static std::string color2str(Color color) {
   char result[] = "#ffffffff";

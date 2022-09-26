@@ -16,7 +16,7 @@ extern std::unordered_map<unsigned int, unsigned int> __mova__references;
 
 // clang-format off
 #define GEN_DESTRUCTOR(TYPE, PTR) using Destructor = void (*)(const TYPE*); Destructor destructor; inline ~TYPE() { if(!__mova__references.count(PTR) || __mova__references[PTR] == 0) { destructor(this); __mova__references.erase(PTR); } else __mova__references[PTR]--; }
-#define GEN_IDENTIFIER(TYPE, PTR) struct TYPE { GEN_DESTRUCTOR(TYPE, PTR); unsigned int PTR = 0; TYPE() = default; TYPE(unsigned int PTR, Destructor destructor) : PTR(PTR), destructor(destructor) {}; TYPE(const TYPE& other) { __mova__references[PTR]--; PTR = other.PTR; __mova__references[PTR]++; }; TYPE& operator=(const TYPE& other) { __mova__references[PTR]--; PTR = other.PTR; __mova__references[PTR]++; return *this; }; }
+#define GEN_IDENTIFIER(TYPE, PTR) struct TYPE { GEN_DESTRUCTOR(TYPE, PTR); unsigned int PTR = 0; TYPE() = default; TYPE(unsigned int PTR, Destructor destructor) : PTR(PTR), destructor(destructor) {}; TYPE(const TYPE& other) { __mova__references[PTR]--; PTR = other.PTR; __mova__references[PTR]++; }; TYPE& operator=(const TYPE& other) { __mova__references[PTR]--; PTR = other.PTR; __mova__references[PTR]++; return *this; }; explicit operator bool() const { return PTR; }; }
 // clang-format on
 
 struct Color {
@@ -33,7 +33,7 @@ struct Color {
 };
 
 struct VertexAttribArray {
-  unsigned int ptr;
+  unsigned int ptr = 0;
   unsigned int elementType;
   unsigned int elementSize;
 
@@ -58,6 +58,7 @@ struct VertexAttribArray {
     __mova__references[ptr]++;
     return *this;
   }
+  explicit operator bool() const { return ptr; }
 };
 
 GEN_IDENTIFIER(Texture, ptr);
@@ -70,9 +71,13 @@ class Renderer {
   virtual VertexAttribArray createVertexAttribArray(const std::vector<float>& array, unsigned int elementSize = 3) = 0;
   virtual Texture createTexture(const uint32_t width, const uint32_t height, const char* data = nullptr, bool antialiasing = false, bool tiling = false) = 0;
   virtual Shader createShader(const std::string_view& vert, const std::string_view& frag) = 0;
+  virtual void defaultShader() = 0;
 
-  virtual void drawToTexture(const Texture& texture) = 0;
+  virtual void drawToTexture(const Texture& texture, uint32_t width, uint32_t height) = 0;
   virtual void drawToScreen() = 0;
+
+  virtual uint32_t getTargetWidth() = 0;
+  virtual uint32_t getTargetHeight() = 0;
 
   virtual void useShader(const Shader& shader) = 0;
   virtual void setTexture(const Texture& texture) = 0;
@@ -102,7 +107,19 @@ class Renderer {
   }
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
+  virtual VertexAttribArray createVertexAttribArray(const std::vector<glm::vec3>& array) {
+    std::vector<float> data;
+    for (glm::vec3 vert : array) {
+      data.push_back(vert.x);
+      data.push_back(vert.y);
+      data.push_back(vert.z);
+    }
+    return createVertexAttribArray(data, 3);
+  }
+
+  virtual Texture createTexture(glm::vec2 size, const char* data = nullptr, bool antialiasing = false, bool tiling = false) { return createTexture(size.x, size.y, data, antialiasing, tiling); }
   virtual void setViewport(glm::vec2 pos, glm::vec2 size) { setViewport(pos.x, pos.y, size.x, size.y); }
+  virtual void drawToTexture(const Texture& texture, glm::vec2 size) { drawToTexture(texture, size.x, size.y); }
   virtual void drawRect(glm::vec2 pos, glm::vec2 size, Color color) { drawRect(pos.x, pos.y, size.x, size.y, color); }
   virtual void drawRect(glm::vec2 pos, glm::vec2 size, glm::vec2 uv1 = glm::vec2(0), glm::vec2 uv2 = glm::vec2(1)) { drawRect(pos.x, pos.y, size.x, size.y, uv1.x, uv1.y, uv2.x, uv2.y); }
   virtual void drawRect(glm::vec2 pos, glm::vec2 size, const Texture& texture, glm::vec2 uv1 = glm::vec2(0), glm::vec2 uv2 = glm::vec2(1), Color tint = white) { drawRect(pos.x, pos.y, size.x, size.y, texture, uv1.x, uv1.y, uv2.x, uv2.y, tint); }
@@ -164,11 +181,11 @@ struct Model {
     return *this;
   }
 
-  std::vector<const VertexAttribArray*> getArrays() {
+  std::vector<const VertexAttribArray*> getArrays(size_t level = 3) {
     std::vector<const VertexAttribArray*> arrays;
     arrays.reserve(m_AttribArrays.get()->size());
-    for (const VertexAttribArray& array : *m_AttribArrays.get()) {
-      arrays.push_back(&array);
+    for (int i = 0; i < std::min(m_AttribArrays.get()->size(), level); i++) {
+      arrays.push_back(&m_AttribArrays.get()->at(i));
     }
     return arrays;
   }

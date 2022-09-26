@@ -66,18 +66,61 @@ class OpenGLRenderer : public Renderer {
     return Shader(program, destroyShader);
   }
 
-  void drawToTexture(const Texture& texture) override {
+  void defaultShader() override {
+    static const char* vertex = R"(
+      attribute vec4 a_Position;
+      attribute vec4 a_TexCoord;
+
+      varying vec2 uv;
+
+      void main() {
+        gl_Position = a_Position.xyz;
+        uv = a_TexCoord.xy;
+      }
+    )";
+    static const char* fragment = R"(
+      precision mediump float;
+
+      varying vec2 uv;
+
+      uniform sampler2D u_Texture;
+      uniform vec4 u_Color;
+
+      void main() {
+        gl_FragColor = texture2D(u_Texture, 1.0 - uv) * u_Color;
+      }
+    )";
+    static Shader shader;
+    if (!shader) {
+      shader = createShader(vertex, fragment);
+    }
+    useShader(shader);
+  }
+
+  void drawToTexture(const Texture& texture, uint32_t width, uint32_t height) override {
     static unsigned int fbo = 0;
     if (!fbo) {
       glGenFramebuffers(1, &fbo);
       MV_ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "Error creating framebuffer!");
     }
 
+    glBindTexture(GL_TEXTURE_2D, texture.ptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.ptr, 0);
+
+    m_TargetWidth = width;
+    m_TargetHeight = height;
   }
 
-  void drawToScreen() override { glBindFramebuffer(GL_FRAMEBUFFER, 0); }
+  void drawToScreen() override {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_TargetWidth = m_TargetHeight = 0;
+  }
+
+  uint32_t getTargetWidth() override { return m_TargetWidth; }
+  uint32_t getTargetHeight() override { return m_TargetHeight; }
 
   void useShader(const Shader& shader) override {
     m_Shader = &shader;
@@ -130,6 +173,7 @@ class OpenGLRenderer : public Renderer {
  private:
   const Shader* m_Shader;
   Texture m_DefaultTexture;
+  uint32_t m_TargetWidth, m_TargetHeight;
 
   size_t getTypeSize(unsigned int type) {
     if (type == GL_FLOAT) return sizeof(GLfloat);
