@@ -1,27 +1,8 @@
 #include "mova.h"
-#ifdef __EMSCRIPTEN__
 #include <map>
-#include <string>
 #include <chrono>
-#include <AL/al.h>
-#include <AL/alc.h>
-#include <emscripten.h>
-#include <emscripten/val.h>
-#include <emscripten/html5.h>
-
-using emscripten::val;
 
 namespace Mova {
-template <typename K, typename V>
-static V getOrDefault(const std::map<K, V>& m, const K& key, const V& def);
-static std::string color2str(Color color);
-static void loadImage(Image* img);
-static val getTempCanvas();
-EM_BOOL mouseScrollCallback(int eventType, const EmscriptenWheelEvent* e, void* userData);
-EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData);
-EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData);
-EM_BOOL pointerlockCallback(int eventType, const EmscriptenPointerlockChangeEvent* e, void* userData) { return false; }
-
 static float g_DeltaTime, g_ScrollX, g_ScrollY;
 static char g_CharPressed = '\0';
 static std::map<Key, uint8_t> g_KeyStates;
@@ -35,34 +16,6 @@ static KeyCallback g_UserKeyCallback;
 enum KeyState : uint8_t { KS_HELD = 0b0001, KS_PRESSED = 0b0010, KS_RELEASED = 0b0100, KS_REPEATED = 0b1000 };
 enum class ContextType { DEFAULT, RENDERER };
 ContextType contextType;
-static WindowData* context;
-struct WindowData {
-  inline WindowData() {}
-  inline ~WindowData() {}
-
-  Renderer* renderer = nullptr;
-  int mouseX, mouseY;
-  val canvas;
-  union {
-    val context;
-    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = 0;
-  };
-};
-
-struct ImageData {
-  Texture texture;
-  bool antialiasing, immContent = false;
-  const char* content;
-  val JSimage;
-};
-
-struct AudioData {
-  //
-};
-
-struct FontData {
-  std::string fontFamily;
-};
 
 float rendX(uint32_t x) { return x * 2.f / getViewportWidth() - 1.f; }
 float rendY(uint32_t y) { return y * -2.f / getViewportHeight() + 1.f; }
@@ -70,42 +23,30 @@ float rendW(uint32_t w) { return w * 2.f / getViewportWidth(); }
 float rendH(uint32_t h) { return h * 2.f / getViewportHeight(); }
 
 void clear(Color color) {
-  if (contextType == ContextType::DEFAULT) fillRect(0, 0, getViewportWidth(), getViewportHeight(), color);
+  if (contextType == ContextType::DEFAULT) _clear(color);
   else if (contextType == ContextType::RENDERER) renderer->clear(color);
   else MV_ERR("Clearing is not supported with this context type yet!");
 }
 
 void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
-  if (contextType == ContextType::DEFAULT) {
-    context->context.set("strokeStyle", color2str(color));
-    context->context.set("lineWidth", thickness);
-    context->context.call<void>("beginPath");
-    context->context.call<void>("moveTo", x1, y1);
-    context->context.call<void>("lineTo", x2, y2);
-    context->context.call<void>("stroke");
-  } else if (contextType == ContextType::RENDERER) renderer->drawLine(rendX(x1), rendY(y1), rendX(x2), rendY(y2), color, thickness);
+  if (contextType == ContextType::DEFAULT) _drawLine(x1, y1, x2, y2, color, thickness);
+  else if (contextType == ContextType::RENDERER) renderer->drawLine(rendX(x1), rendY(y1), rendX(x2), rendY(y2), color, thickness);
   else MV_ERR("Line drawing is not supported with this context type yet!");
 }
 
 void fillRect(int x, int y, int w, int h, Color color) {
-  if (contextType == ContextType::DEFAULT) {
-    context->context.set("fillStyle", color2str(color));
-    context->context.call<void>("fillRect", x, y, w, h);
-  } else if (contextType == ContextType::RENDERER) renderer->drawRect(rendX(x), rendY(y), rendW(w), rendH(h), color);
+  if (contextType == ContextType::DEFAULT) _fillRect(x, y, w, h, color);
+  else if (contextType == ContextType::RENDERER) renderer->drawRect(rendX(x), rendY(y), rendW(w), rendH(h), color);
   else MV_ERR("Rectangle filling is not supported with this context type yet!");
 }
 
 void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
-  if (contextType == ContextType::DEFAULT) {
-    if (flip) {
-      context->context.call<void>("save");
-      context->context.call<void>("translate", (flip & FLIP_HORIZONTAL ? getViewportWidth() : 0), (flip & FLIP_VERTICAL ? getViewportHeight() : 0));
-      context->context.call<void>("scale", 1 * (flip & FLIP_HORIZONTAL ? -1 : 1), (flip & FLIP_VERTICAL ? -1 : 1));
-    }
-    context->context.set("imageSmoothingEnabled", image.data->antialiasing);
-    context->context.call<void>("drawImage", image.data->JSimage, srcX, srcY, srcW, srcH, (flip & FLIP_HORIZONTAL ? getViewportWidth() - x : x), (flip & FLIP_VERTICAL ? getViewportHeight() - y : y), w * (flip & FLIP_HORIZONTAL ? -1 : 1), h * (flip & FLIP_VERTICAL ? -1 : 1));
-    if (flip) context->context.call<void>("restore");
-  } else MV_ERR("Image drawing is not supported with this context type yet!");
+  if (w == -1) w = image.width;
+  if (h == -1) h = image.height;
+  if (srcW == -1) srcW = image.width;
+  if (srcH == -1) srcH = image.height;
+  if (contextType == ContextType::DEFAULT) _drawImage(image, x, y, w, h, flip, srcX, srcY, srcW, srcH);
+  else MV_ERR("Image drawing is not supported with this context type yet!");
 }
 
 void drawText(int x, int y, std::string text, Color color) {

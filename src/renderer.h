@@ -64,7 +64,9 @@ struct VertexAttribArray {
 GEN_IDENTIFIER(Texture, ptr);
 GEN_IDENTIFIER(Shader, program);
 
-const Color black = Color(0), white = Color(255), grey = Color(150), red = Color(255, 0, 0), green = Color(0, 255, 0), blue = Color(0, 0, 255);
+const Color black = Color(0), white = Color(255), gray = Color(150), darkgray(51), red = Color(255, 0, 0), green = Color(0, 255, 0), blue = Color(0, 0, 255);
+
+enum class RenderType { TRIANGLES, LINES };
 
 class Renderer {
  public:
@@ -82,12 +84,13 @@ class Renderer {
   virtual void useShader(const Shader& shader) = 0;
   virtual void setTexture(const Texture& texture) = 0;
   virtual void setViewport(int x, int y, int width, int height) = 0;
+  virtual void setThickness(float thickness) = 0;
   virtual void depth(bool enabled) = 0;
 
   virtual void clear(Color color = black) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, int type = -1) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, Color color, int type = -1) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, const Texture& texture, Color tint = white, int type = -1) = 0;
+  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, Color color, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, const Texture& texture, Color tint = white, RenderType type = RenderType::TRIANGLES) = 0;
 
   virtual void drawRect(float x, float y, float w, float h, Color color) {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
@@ -104,6 +107,12 @@ class Renderer {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
     VertexAttribArray uvs = createVertexAttribArray({u1, v1, u1, v2, u2, v2, u1, v1, u2, v1, u2, v2}, 2);
     draw({&verts, &uvs}, 6, texture, tint);
+  }
+
+  virtual void drawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 3) {
+    VertexAttribArray verts = createVertexAttribArray({x1, y1, 0, x2, y2, 0});
+    setThickness(thickness);
+    draw({&verts}, 2, color, RenderType::LINES);
   }
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
@@ -123,6 +132,7 @@ class Renderer {
   virtual void drawRect(glm::vec2 pos, glm::vec2 size, Color color) { drawRect(pos.x, pos.y, size.x, size.y, color); }
   virtual void drawRect(glm::vec2 pos, glm::vec2 size, glm::vec2 uv1 = glm::vec2(0), glm::vec2 uv2 = glm::vec2(1)) { drawRect(pos.x, pos.y, size.x, size.y, uv1.x, uv1.y, uv2.x, uv2.y); }
   virtual void drawRect(glm::vec2 pos, glm::vec2 size, const Texture& texture, glm::vec2 uv1 = glm::vec2(0), glm::vec2 uv2 = glm::vec2(1), Color tint = white) { drawRect(pos.x, pos.y, size.x, size.y, texture, uv1.x, uv1.y, uv2.x, uv2.y, tint); }
+  virtual void drawLine(glm::vec2 from, glm::vec2 to, Color color, float thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
 #endif
 
   virtual void setShaderVec2(const Shader& shader, const std::string_view& name, float x, float y) = 0;
@@ -137,6 +147,8 @@ class Renderer {
   virtual void setShaderBool(const Shader& shader, const std::string_view& name, bool value) = 0;
   virtual void setShaderFloat(const Shader& shader, const std::string_view& name, float value) = 0;
   virtual void setShaderColor(const Shader& shader, const std::string_view& name, Color value) = 0;
+
+  virtual ~Renderer() = default;
 };
 
 extern Renderer* renderer;

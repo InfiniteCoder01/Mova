@@ -9,6 +9,8 @@ namespace Mova {
 using RendererConstructor = Renderer* (*)();
 struct WindowData;
 struct ImageData;
+struct AudioData;
+struct FontData;
 struct Window {
   Window(std::string_view title, RendererConstructor renderer = nullptr);
   ~Window();
@@ -26,6 +28,22 @@ struct Image {
 
   int width, height;
   ImageData* data;
+};
+
+struct Audio {
+  Audio() = default;
+  Audio(std::string filename);
+  ~Audio();
+
+  AudioData* data;
+};
+
+struct Font {
+  Font() = default;
+  Font(std::string filename);
+  ~Font();
+
+  FontData* data;
 };
 
 enum MouseButton : uint8_t {
@@ -68,7 +86,7 @@ void fillRect(int x, int y, int w, int h, Color color);
 void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
 void drawText(int x, int y, std::string text, Color color = white);
-void setFont(std::string font);
+void setFont(Font font, int size);
 uint32_t textWidth(std::string text);
 uint32_t textHeight(std::string text);
 
@@ -99,6 +117,8 @@ int getMouseDeltaY();
 float getScrollX();
 float getScrollY();
 
+void pointerLock(bool state);
+
 using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
 using ScrollCallback = void (*)(float deltaX, float deltaY);
 using KeyCallback = void (*)(Key key, char character, bool state);
@@ -118,10 +138,16 @@ inline glm::vec2 getMousePos() { return glm::vec2(getMouseX(), getMouseY()); }
 inline glm::vec2 getMouseDelta() { return glm::vec2(getMouseDeltaX(), getMouseDeltaY()); }
 inline glm::vec2 getScroll() { return glm::vec2(getScrollX(), getScrollY()); }
 #endif
+
+void _clear(Color color);
+void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness);
+void _fillRect(int x, int y, int w, int h, Color color);
+void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH);
 }  // namespace Mova
 
 using MvWindow = Mova::Window;
 using MvImage = Mova::Image;
+using MvFont = Mova::Font;
 using MvKey = Mova::Key;
 using Mova::Flip;
 using Mova::FLIP_BOTH;
@@ -132,5 +158,3 @@ using Mova::MOUSE_LEFT;
 using Mova::MOUSE_MIDDLE;
 using Mova::MOUSE_RIGHT;
 using Mova::MouseButton;
-
-// void bindFramebuffer(GLuint framebuffer, uint32_t width = 0, uint32_t height = 0);

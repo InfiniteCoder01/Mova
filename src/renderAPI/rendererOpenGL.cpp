@@ -30,7 +30,7 @@ class OpenGLRenderer : public Renderer {
   }
 
   Texture createTexture(const uint32_t width, const uint32_t height, const char* data, bool antialiasing, bool tiling) override {
-    GLuint texture;
+    unsigned int texture;
     glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -74,7 +74,7 @@ class OpenGLRenderer : public Renderer {
       varying vec2 uv;
 
       void main() {
-        gl_Position = a_Position.xyz;
+        gl_Position = a_Position;
         uv = a_TexCoord.xy;
       }
     )";
@@ -91,9 +91,7 @@ class OpenGLRenderer : public Renderer {
       }
     )";
     static Shader shader;
-    if (!shader) {
-      shader = createShader(vertex, fragment);
-    }
+    if (!shader) shader = createShader(vertex, fragment);
     useShader(shader);
   }
 
@@ -112,6 +110,7 @@ class OpenGLRenderer : public Renderer {
 
     m_TargetWidth = width;
     m_TargetHeight = height;
+    setViewport(0, 0, width, height);
   }
 
   void drawToScreen() override {
@@ -136,22 +135,29 @@ class OpenGLRenderer : public Renderer {
 
   void setViewport(int x, int y, int width, int height) override { glViewport(x, y, width, height); }
 
+  void setThickness(float thickness) override { glLineWidth(thickness); }
+
   void depth(bool enabled) override {
     if (enabled) glEnable(GL_DEPTH_TEST);
     else glDisable(GL_DEPTH_TEST);
   }
 
-  void clear(Color color) override { glClearColor(color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0); }
-
-  void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, int type) override {
-    if (type == -1) type = GL_TRIANGLES;
-    setVertexAttribArrays(arrays);
-    glDrawArrays(type, 0, count);
+  void clear(Color color) override {
+    glClearColor(color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
 
-  void draw(const std::vector<const VertexAttribArray*>& attrs, const unsigned int count, Color color, int type) override { draw(attrs, count, m_DefaultTexture, color, type); }
+  void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, RenderType type) override {
+    unsigned int glType;
+    if (type == RenderType::TRIANGLES) glType = GL_TRIANGLES;
+    if (type == RenderType::LINES) glType = GL_LINES;
+    setVertexAttribArrays(arrays);
+    glDrawArrays(glType, 0, count);
+  }
 
-  void draw(const std::vector<const VertexAttribArray*>& attrs, const unsigned int count, const Texture& texture, Color tint, int type) override {
+  void draw(const std::vector<const VertexAttribArray*>& attrs, const unsigned int count, Color color, RenderType type) override { draw(attrs, count, m_DefaultTexture, color, type); }
+
+  void draw(const std::vector<const VertexAttribArray*>& attrs, const unsigned int count, const Texture& texture, Color tint, RenderType type) override {
     setTexture(texture);
     setShaderColor(*m_Shader, "u_Color", tint);
     draw(attrs, count, type);
@@ -173,7 +179,7 @@ class OpenGLRenderer : public Renderer {
  private:
   const Shader* m_Shader;
   Texture m_DefaultTexture;
-  uint32_t m_TargetWidth, m_TargetHeight;
+  uint32_t m_TargetWidth = 0, m_TargetHeight = 0;
 
   size_t getTypeSize(unsigned int type) {
     if (type == GL_FLOAT) return sizeof(GLfloat);

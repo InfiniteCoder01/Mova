@@ -1,3 +1,4 @@
+#if __has_include("imgui.h")
 #include "imguiImpl.h"
 #include <map>
 
@@ -102,3 +103,4 @@ void ImGui_ImplMova_Shutdown() {
   ImGui_ImplOpenGL3_Shutdown();
   ImGui::DestroyContext();
 }
+#endif
