@@ -5,7 +5,7 @@ int main() {                                  // There is full glm::vec2 support
   //                  Antialiasing, optional and true by default
   //                                    V
   MvImage image = MvImage("test.png", false);        // MvImage(width, height, data (const char*, RGBA8 and nullptr by default (creates black image)), atialiasing = false)
-  Mova::setFont("48px serif");                // Fonts are in dev
+  // Mova::setFont("48px serif");                // Fonts are in dev
   Flip flip = FLIP_NONE;
   float x = 0, y = 0;
   while (true) {
@@ -32,8 +32,9 @@ int main() {                                  // There is full glm::vec2 support
     //             From                 To                     Color Thickness (Optional, 3 pixels by default)
     Mova::fillRect(x1, y1, 100, 100, Mova::isMouseButtonHeld(MOUSE_LEFT) ? red : green);  // There is also isMouseButtonPressed and isMouseButtonReleased
 
+    printf("(%d, %d), (%f, %f)\n", Mova::getMouseDeltaX(), Mova::getMouseDeltaY(), Mova::getScrollX(), Mova::getScrollY());
+
     /*
-    There is also: getMouseDeltaX, getMouseDeltaY, getScrollX, getScrollY
     And GLM versions: textSize, getViewportSize, getMousePos, getMouseDelta and getScroll
     There is getCharPressed, useful for typing and text
     There is also Color(red, green, blue, alpha = 255) constructor

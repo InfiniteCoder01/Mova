@@ -1,3 +1,4 @@
+#if __has_include("imgui.h")
 #include "imguiImpl.h"
 #include <map>
 
@@ -50,11 +51,11 @@ void ImGui_ImplMova_Init() {
   Mova::setMouseCallback([](MvWindow* window, int x, int y, MouseButton button, bool down) {
     ImGuiIO& io = ImGui::GetIO();
     io.AddMousePosEvent(x, y);
-    if (button == MOUSE_LEFT) {
+    if (button & MOUSE_LEFT) {
       io.AddMouseButtonEvent(ImGuiMouseButton_Left, down);
-    } else if (button == MOUSE_MIDDLE) {
+    } else if (button & MOUSE_MIDDLE) {
       io.AddMouseButtonEvent(ImGuiMouseButton_Middle, down);
-    } else if (button == MOUSE_RIGHT) {
+    } else if (button & MOUSE_RIGHT) {
       io.AddMouseButtonEvent(ImGuiMouseButton_Right, down);
     }
   });
@@ -64,16 +65,15 @@ void ImGui_ImplMova_Init() {
     io.AddMouseWheelEvent(deltaX, deltaY);
   });
 
-  Mova::setKeyCallback([](MvKey key, char character, bool state) {
+  Mova::setKeyCallback([](MvKey key, char character, bool state, bool repeat) {
+    if (repeat) return;
     ImGuiIO& io = ImGui::GetIO();
     io.AddKeyEvent(getOrDefault(keymap, key, (ImGuiKey)ImGuiKey_None), state);
     if (key == MvKey::ControlLeft || key == MvKey::ControlRight) io.AddKeyEvent(ImGuiKey_ModCtrl, state);
     if (key == MvKey::ShiftLeft || key == MvKey::ShiftRight) io.AddKeyEvent(ImGuiKey_ModShift, state);
     if (key == MvKey::AltLeft || key == MvKey::AltRight) io.AddKeyEvent(ImGuiKey_ModAlt, state);
     if (key == MvKey::MetaLeft || key == MvKey::MetaRight) io.AddKeyEvent(ImGuiKey_ModSuper, state);
-    if (state && character) {
-      io.AddInputCharacter(character);
-    }
+    if (state && character) io.AddInputCharacter(character);
   });
 
   ImGui_ImplOpenGL3_Init();
@@ -102,3 +102,4 @@ void ImGui_ImplMova_Shutdown() {
   ImGui_ImplOpenGL3_Shutdown();
   ImGui::DestroyContext();
 }
+#endif
