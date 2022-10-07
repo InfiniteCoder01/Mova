@@ -3,7 +3,6 @@
 #include <vector>
 #include <fstream>
 #include <string_view>
-#include <unordered_map>
 #if __has_include("glm/glm.hpp")
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -11,13 +10,6 @@
 #include <glm.hpp>
 #include <gtc/type_ptr.hpp>
 #endif
-
-extern std::unordered_map<unsigned int, unsigned int> __mova__references;
-
-// clang-format off
-#define GEN_DESTRUCTOR(TYPE, PTR) using Destructor = void (*)(const TYPE*); Destructor destructor; inline ~TYPE() { if(!__mova__references.count(PTR) || __mova__references[PTR] == 0) { destructor(this); __mova__references.erase(PTR); } else __mova__references[PTR]--; }
-#define GEN_IDENTIFIER(TYPE, PTR) struct TYPE { GEN_DESTRUCTOR(TYPE, PTR); unsigned int PTR = 0; TYPE() = default; TYPE(unsigned int PTR, Destructor destructor) : PTR(PTR), destructor(destructor) {}; TYPE(const TYPE& other) { __mova__references[PTR]--; PTR = other.PTR; __mova__references[PTR]++; }; TYPE& operator=(const TYPE& other) { __mova__references[PTR]--; PTR = other.PTR; __mova__references[PTR]++; return *this; }; explicit operator bool() const { return PTR; }; }
-// clang-format on
 
 struct Color {
   Color() = default;
@@ -32,37 +24,18 @@ struct Color {
   };
 };
 
-struct VertexAttribArray {
-  unsigned int ptr = 0;
+struct _VertexAttribArray {
+  unsigned int ptr;
   unsigned int elementType;
   unsigned int elementSize;
 
-  GEN_DESTRUCTOR(VertexAttribArray, ptr);
-
-  VertexAttribArray() = default;
-  VertexAttribArray(unsigned int elementType, unsigned int elementSize, Destructor destructor) : elementType(elementType), elementSize(elementSize), destructor(destructor) {}
-
-  VertexAttribArray(const VertexAttribArray& other) {
-    __mova__references[ptr]--;
-    ptr = other.ptr;
-    elementType = other.elementType;
-    elementSize = other.elementSize;
-    __mova__references[ptr]++;
-  }
-
-  VertexAttribArray& operator=(const VertexAttribArray& other) {
-    __mova__references[ptr]--;
-    ptr = other.ptr;
-    elementType = other.elementType;
-    elementSize = other.elementSize;
-    __mova__references[ptr]++;
-    return *this;
-  }
-  explicit operator bool() const { return ptr; }
+  _VertexAttribArray() = default;
+  _VertexAttribArray(unsigned int elementType, unsigned int elementSize) : elementType(elementType), elementSize(elementSize) {}
 };
 
-GEN_IDENTIFIER(Texture, ptr);
-GEN_IDENTIFIER(Shader, program);
+typedef std::shared_ptr<_VertexAttribArray> VertexAttribArray;
+typedef std::shared_ptr<unsigned int> Texture;
+typedef std::shared_ptr<unsigned int> Shader;
 
 const Color black = Color(0), white = Color(255), gray = Color(150), darkgray(51), red = Color(255, 0, 0), green = Color(0, 255, 0), blue = Color(0, 0, 255);
 
@@ -88,31 +61,31 @@ class Renderer {
   virtual void depth(bool enabled) = 0;
 
   virtual void clear(Color color = black) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, RenderType type = RenderType::TRIANGLES) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, Color color, RenderType type = RenderType::TRIANGLES) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray*>& arrays, const unsigned int count, const Texture& texture, Color tint = white, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, Color color, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, const Texture& texture, Color tint = white, RenderType type = RenderType::TRIANGLES) = 0;
 
   virtual void drawRect(float x, float y, float w, float h, Color color) {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
-    draw({&verts}, 6, color);
+    draw({verts}, 6, color);
   }
 
   virtual void drawRect(float x, float y, float w, float h, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1) {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
     VertexAttribArray uvs = createVertexAttribArray({u1, v1, u1, v2, u2, v2, u1, v1, u2, v1, u2, v2}, 2);
-    draw({&verts, &uvs}, 6);
+    draw({verts, uvs}, 6);
   }
 
   virtual void drawRect(float x, float y, float w, float h, const Texture& texture, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1, Color tint = white) {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
     VertexAttribArray uvs = createVertexAttribArray({u1, v1, u1, v2, u2, v2, u1, v1, u2, v1, u2, v2}, 2);
-    draw({&verts, &uvs}, 6, texture, tint);
+    draw({verts, uvs}, 6, texture, tint);
   }
 
   virtual void drawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 3) {
     VertexAttribArray verts = createVertexAttribArray({x1, y1, 0, x2, y2, 0});
     setThickness(thickness);
-    draw({&verts}, 2, color, RenderType::LINES);
+    draw({verts}, 2, color, RenderType::LINES);
   }
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
@@ -193,11 +166,11 @@ struct Model {
     return *this;
   }
 
-  std::vector<const VertexAttribArray*> getArrays(size_t level = 3) {
-    std::vector<const VertexAttribArray*> arrays;
+  std::vector<const VertexAttribArray> getArrays(size_t level = 3) {
+    std::vector<const VertexAttribArray> arrays;
     arrays.reserve(m_AttribArrays.get()->size());
     for (int i = 0; i < std::min(m_AttribArrays.get()->size(), level); i++) {
-      arrays.push_back(&m_AttribArrays.get()->at(i));
+      arrays.push_back(m_AttribArrays.get()->at(i));
     }
     return arrays;
   }

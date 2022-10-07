@@ -6,6 +6,9 @@
 #include "logassert.h"
 
 namespace Mova {
+enum class ContextType { DEFAULT, RENDERER };
+extern ContextType contextType;
+
 using RendererConstructor = Renderer* (*)();
 struct WindowData;
 struct ImageData;
@@ -121,7 +124,7 @@ void pointerLock(bool state);
 
 using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
 using ScrollCallback = void (*)(float deltaX, float deltaY);
-using KeyCallback = void (*)(Key key, char character, bool state);
+using KeyCallback = void (*)(Key key, char character, bool state, bool repeat);
 
 void setScrollCallback(ScrollCallback callback);
 void setMouseCallback(MouseCallback callback);
@@ -143,6 +146,17 @@ void _clear(Color color);
 void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness);
 void _fillRect(int x, int y, int w, int h, Color color);
 void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH);
+void _drawText(int x, int y, std::string text, Color color);
+void _setFont(Font font, int size);
+uint32_t _textWidth(std::string text);
+uint32_t _textHeight(std::string text);
+uint32_t _getViewportWidth();
+uint32_t _getViewportHeight();
+void _nextFrame();
+
+void _mouseCallback(Window* window, int mouseX, int mouseY, int deltaX, int deltaY, uint8_t buttons);
+void _mouseScrollCallback(float deltaX, float deltaY);
+void _keyCallback(Key key, char ch, bool state, bool repeat);
 }  // namespace Mova
 
 using MvWindow = Mova::Window;

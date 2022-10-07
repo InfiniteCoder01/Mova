@@ -1361,7 +1361,8 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  56056: () => { addOnPostRun(function() { if (Module.canvas) Module.canvas.focus(); }); }
+  8456: () => { addOnPostRun(function() { if (Module.canvas) Module.canvas.focus(); }); },  
+ 8528: ($0) => { Asyncify.handleAsync(async () => { var font = new FontFace(UTF8ToString($0).replace(' ', '-').replace('/', '-').replace('.', '-'), FS.readFile(UTF8ToString($0)).buffer); await font.load(); document.fonts.add(font); }); }
 };
 
 
@@ -4676,137 +4677,6 @@ var ASM_CONSTS = {
       throw ptr + " - Exception catching is disabled, this exception cannot be caught. Compile with -sNO_DISABLE_EXCEPTION_CATCHING or -sEXCEPTION_CATCHING_ALLOWED=[..] to catch.";
     }
 
-  function setErrNo(value) {
-      HEAP32[((___errno_location())>>2)] = value;
-      return value;
-    }
-  function ___syscall_fcntl64(fd, cmd, varargs) {
-  SYSCALLS.varargs = varargs;
-  try {
-  
-      var stream = SYSCALLS.getStreamFromFD(fd);
-      switch (cmd) {
-        case 0: {
-          var arg = SYSCALLS.get();
-          if (arg < 0) {
-            return -28;
-          }
-          var newStream;
-          newStream = FS.createStream(stream, arg);
-          return newStream.fd;
-        }
-        case 1:
-        case 2:
-          return 0;  // FD_CLOEXEC makes no sense for a single process.
-        case 3:
-          return stream.flags;
-        case 4: {
-          var arg = SYSCALLS.get();
-          stream.flags |= arg;
-          return 0;
-        }
-        case 5:
-        /* case 5: Currently in musl F_GETLK64 has same value as F_GETLK, so omitted to avoid duplicate case blocks. If that changes, uncomment this */ {
-          
-          var arg = SYSCALLS.get();
-          var offset = 0;
-          // We're always unlocked.
-          HEAP16[(((arg)+(offset))>>1)] = 2;
-          return 0;
-        }
-        case 6:
-        case 7:
-        /* case 6: Currently in musl F_SETLK64 has same value as F_SETLK, so omitted to avoid duplicate case blocks. If that changes, uncomment this */
-        /* case 7: Currently in musl F_SETLKW64 has same value as F_SETLKW, so omitted to avoid duplicate case blocks. If that changes, uncomment this */
-          
-          
-          return 0; // Pretend that the locking is successful.
-        case 16:
-        case 8:
-          return -28; // These are for sockets. We don't have them fully implemented yet.
-        case 9:
-          // musl trusts getown return values, due to a bug where they must be, as they overlap with errors. just return -1 here, so fcntl() returns that, and we set errno ourselves.
-          setErrNo(28);
-          return -1;
-        default: {
-          return -28;
-        }
-      }
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
-    return -e.errno;
-  }
-  }
-
-  function ___syscall_ioctl(fd, op, varargs) {
-  SYSCALLS.varargs = varargs;
-  try {
-  
-      var stream = SYSCALLS.getStreamFromFD(fd);
-      switch (op) {
-        case 21509:
-        case 21505: {
-          if (!stream.tty) return -59;
-          return 0;
-        }
-        case 21510:
-        case 21511:
-        case 21512:
-        case 21506:
-        case 21507:
-        case 21508: {
-          if (!stream.tty) return -59;
-          return 0; // no-op, not actually adjusting terminal settings
-        }
-        case 21519: {
-          if (!stream.tty) return -59;
-          var argp = SYSCALLS.get();
-          HEAP32[((argp)>>2)] = 0;
-          return 0;
-        }
-        case 21520: {
-          if (!stream.tty) return -59;
-          return -28; // not supported
-        }
-        case 21531: {
-          var argp = SYSCALLS.get();
-          return FS.ioctl(stream, op, argp);
-        }
-        case 21523: {
-          // TODO: in theory we should write to the winsize struct that gets
-          // passed in, but for now musl doesn't read anything on it
-          if (!stream.tty) return -59;
-          return 0;
-        }
-        case 21524: {
-          // TODO: technically, this ioctl call should change the window size.
-          // but, since emscripten doesn't have any concept of a terminal window
-          // yet, we'll just silently throw it away as we do TIOCGWINSZ
-          if (!stream.tty) return -59;
-          return 0;
-        }
-        default: return -28; // not supported
-      }
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
-    return -e.errno;
-  }
-  }
-
-  function ___syscall_openat(dirfd, path, flags, varargs) {
-  SYSCALLS.varargs = varargs;
-  try {
-  
-      path = SYSCALLS.getStr(path);
-      path = SYSCALLS.calculateAt(dirfd, path);
-      var mode = varargs ? SYSCALLS.get() : 0;
-      return FS.open(path, flags, mode).fd;
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
-    return -e.errno;
-  }
-  }
-
   function __embind_register_bigint(primitiveType, name, size, minRange, maxRange) {}
 
   function getShiftFromSize(size) {
@@ -5580,6 +5450,12 @@ var ASM_CONSTS = {
     }
 
 
+  function __emval_equals(first, second) {
+      first = Emval.toValue(first);
+      second = Emval.toValue(second);
+      return first == second;
+    }
+
   function emval_get_global() {
       if (typeof globalThis == 'object') {
         return globalThis;
@@ -5698,6 +5574,63 @@ var ASM_CONSTS = {
       }
     }
 
+  function craftEmvalAllocator(argCount) {
+      /*This function returns a new function that looks like this:
+      function emval_allocator_3(constructor, argTypes, args) {
+          var argType0 = requireRegisteredType(HEAP32[(argTypes >> 2)], "parameter 0");
+          var arg0 = argType0['readValueFromPointer'](args);
+          var argType1 = requireRegisteredType(HEAP32[(argTypes >> 2) + 1], "parameter 1");
+          var arg1 = argType1['readValueFromPointer'](args + 8);
+          var argType2 = requireRegisteredType(HEAP32[(argTypes >> 2) + 2], "parameter 2");
+          var arg2 = argType2['readValueFromPointer'](args + 16);
+          var obj = new constructor(arg0, arg1, arg2);
+          return Emval.toHandle(obj);
+      } */
+      var argsList = "";
+      for (var i = 0; i < argCount; ++i) {
+        argsList += (i!==0?", ":"")+"arg"+i; // 'arg0, arg1, ..., argn'
+      }
+  
+      // The body of the generated function does not have access to enclosing
+      // scope where HEAPU64/HEAPU32/etc are defined, and we cannot pass them
+      // directly as arguments (like we do the Module object) since memory
+      // growth can cause them to be re-bound.
+      var getMemory = () => HEAPU32;
+  
+      var functionBody =
+          "return function emval_allocator_"+argCount+"(constructor, argTypes, args) {\n" +
+          "  var HEAPU32 = getMemory();\n";
+  
+      for (var i = 0; i < argCount; ++i) {
+          functionBody +=
+              "var argType"+i+" = requireRegisteredType(HEAPU32[((argTypes)>>2)], 'parameter "+i+"');\n" +
+              "var arg"+i+" = argType"+i+".readValueFromPointer(args);\n" +
+              "args += argType"+i+"['argPackAdvance'];\n" +
+              "argTypes += 4;\n";
+      }
+      functionBody +=
+          "var obj = new constructor("+argsList+");\n" +
+          "return valueToHandle(obj);\n" +
+          "}\n";
+  
+      /*jshint evil:true*/
+      return (new Function("requireRegisteredType", "Module", "valueToHandle", "getMemory" , functionBody))(
+          requireRegisteredType, Module, Emval.toHandle, getMemory);
+    }
+  
+  var emval_newers = {};
+  function __emval_new(handle, argCount, argTypes, args) {
+      handle = Emval.toValue(handle);
+  
+      var newer = emval_newers[argCount];
+      if (!newer) {
+        newer = craftEmvalAllocator(argCount);
+        emval_newers[argCount] = newer;
+      }
+  
+      return newer(handle, argTypes, args);
+    }
+
   function __emval_new_cstring(v) {
       return Emval.toHandle(getStringOrSymbol(v));
     }
@@ -5764,6 +5697,27 @@ var ASM_CONSTS = {
       return ASM_CONSTS[code].apply(null, args);
     }
 
+
+  function _emscripten_get_preloaded_image_data(path, w, h) {
+      if ((path | 0) === path) path = UTF8ToString(path);
+  
+      path = PATH_FS.resolve(path);
+  
+      var canvas = /** @type {HTMLCanvasElement} */(preloadedImages[path]);
+      if (canvas) {
+        var ctx = canvas.getContext("2d");
+        var image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var buf = _malloc(canvas.width * canvas.height * 4);
+  
+        HEAPU8.set(image.data, buf);
+  
+        HEAP32[((w)>>2)] = canvas.width;
+        HEAP32[((h)>>2)] = canvas.height;
+        return buf;
+      }
+  
+      return 0;
+    }
 
   function _emscripten_memcpy_big(dest, src, num) {
       HEAPU8.copyWithin(dest, src, src + num);
@@ -6390,33 +6344,6 @@ var ASM_CONSTS = {
   }
   }
 
-  /** @param {number=} offset */
-  function doReadv(stream, iov, iovcnt, offset) {
-      var ret = 0;
-      for (var i = 0; i < iovcnt; i++) {
-        var ptr = HEAPU32[((iov)>>2)];
-        var len = HEAPU32[(((iov)+(4))>>2)];
-        iov += 8;
-        var curr = FS.read(stream, HEAP8,ptr, len, offset);
-        if (curr < 0) return -1;
-        ret += curr;
-        if (curr < len) break; // nothing more to read
-      }
-      return ret;
-    }
-  function _fd_read(fd, iov, iovcnt, pnum) {
-  try {
-  
-      var stream = SYSCALLS.getStreamFromFD(fd);
-      var num = doReadv(stream, iov, iovcnt);
-      HEAPU32[((pnum)>>2)] = num;
-      return 0;
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
-    return e.errno;
-  }
-  }
-
   function convertI32PairToI53Checked(lo, hi) {
       assert(lo == (lo >>> 0) || lo == (lo|0)); // lo should either be a i32 or a u32
       assert(hi === (hi|0));                    // hi should be a i32
@@ -6487,19 +6414,15 @@ var ASM_CONSTS = {
       GLctx.bindBuffer(target, GL.buffers[buffer]);
     }
 
+  function _glBindFramebuffer(target, framebuffer) {
+  
+      GLctx.bindFramebuffer(target, GL.framebuffers[framebuffer]);
+  
+    }
+
   function _glBindTexture(target, texture) {
       GLctx.bindTexture(target, GL.textures[texture]);
     }
-
-  function _glBindVertexArray(vao) {
-      GLctx['bindVertexArray'](GL.vaos[vao]);
-    }
-
-  function _glBlendEquation(x0) { GLctx['blendEquation'](x0) }
-
-  function _glBlendEquationSeparate(x0, x1) { GLctx['blendEquationSeparate'](x0, x1) }
-
-  function _glBlendFuncSeparate(x0, x1, x2, x3) { GLctx['blendFuncSeparate'](x0, x1, x2, x3) }
 
   function _glBufferData(target, size, data, usage) {
   
@@ -6519,13 +6442,7 @@ var ASM_CONSTS = {
       }
     }
 
-  function _glBufferSubData(target, offset, size, data) {
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        size && GLctx.bufferSubData(target, offset, HEAPU8, data, size);
-        return;
-      }
-      GLctx.bufferSubData(target, offset, HEAPU8.subarray(data, data+size));
-    }
+  function _glCheckFramebufferStatus(x0) { return GLctx['checkFramebufferStatus'](x0) }
 
   function _glClear(x0) { GLctx['clear'](x0) }
 
@@ -6606,18 +6523,6 @@ var ASM_CONSTS = {
       }
     }
 
-  function _glDeleteVertexArrays(n, vaos) {
-      for (var i = 0; i < n; i++) {
-        var id = HEAP32[(((vaos)+(i*4))>>2)];
-        GLctx['deleteVertexArray'](GL.vaos[id]);
-        GL.vaos[id] = null;
-      }
-    }
-
-  function _glDetachShader(program, shader) {
-      GLctx.detachShader(GL.programs[program], GL.shaders[shader]);
-    }
-
   function _glDisable(x0) { GLctx['disable'](x0) }
 
   function _glDisableVertexAttribArray(index) {
@@ -6630,16 +6535,15 @@ var ASM_CONSTS = {
   
     }
 
-  function _glDrawElements(mode, count, type, indices) {
-  
-      GLctx.drawElements(mode, count, type, indices);
-  
-    }
-
   function _glEnable(x0) { GLctx['enable'](x0) }
 
   function _glEnableVertexAttribArray(index) {
       GLctx.enableVertexAttribArray(index);
+    }
+
+  function _glFramebufferTexture2D(target, attachment, textarget, texture, level) {
+      GLctx.framebufferTexture2D(target, attachment, textarget,
+                                      GL.textures[texture], level);
     }
 
   function __glGenObject(n, buffers, createFunction, objectTable
@@ -6661,164 +6565,14 @@ var ASM_CONSTS = {
         );
     }
 
+  function _glGenFramebuffers(n, ids) {
+      __glGenObject(n, ids, 'createFramebuffer', GL.framebuffers
+        );
+    }
+
   function _glGenTextures(n, textures) {
       __glGenObject(n, textures, 'createTexture', GL.textures
         );
-    }
-
-  function _glGenVertexArrays(n, arrays) {
-      __glGenObject(n, arrays, 'createVertexArray', GL.vaos
-        );
-    }
-
-  function _glGetAttribLocation(program, name) {
-      return GLctx.getAttribLocation(GL.programs[program], UTF8ToString(name));
-    }
-
-  function readI53FromI64(ptr) {
-      return HEAPU32[ptr>>2] + HEAP32[ptr+4>>2] * 4294967296;
-    }
-  
-  function readI53FromU64(ptr) {
-      return HEAPU32[ptr>>2] + HEAPU32[ptr+4>>2] * 4294967296;
-    }
-  function writeI53ToI64(ptr, num) {
-      HEAPU32[ptr>>2] = num;
-      HEAPU32[ptr+4>>2] = (num - HEAPU32[ptr>>2])/4294967296;
-      var deserialized = (num >= 0) ? readI53FromU64(ptr) : readI53FromI64(ptr);
-      if (deserialized != num) warnOnce('writeI53ToI64() out of range: serialized JS Number ' + num + ' to Wasm heap as bytes lo=0x' + HEAPU32[ptr>>2].toString(16) + ', hi=0x' + HEAPU32[ptr+4>>2].toString(16) + ', which deserializes back to ' + deserialized + ' instead!');
-    }
-  function emscriptenWebGLGet(name_, p, type) {
-      // Guard against user passing a null pointer.
-      // Note that GLES2 spec does not say anything about how passing a null pointer should be treated.
-      // Testing on desktop core GL 3, the application crashes on glGetIntegerv to a null pointer, but
-      // better to report an error instead of doing anything random.
-      if (!p) {
-        GL.recordError(0x501 /* GL_INVALID_VALUE */);
-        return;
-      }
-      var ret = undefined;
-      switch (name_) { // Handle a few trivial GLES values
-        case 0x8DFA: // GL_SHADER_COMPILER
-          ret = 1;
-          break;
-        case 0x8DF8: // GL_SHADER_BINARY_FORMATS
-          if (type != 0 && type != 1) {
-            GL.recordError(0x500); // GL_INVALID_ENUM
-          }
-          return; // Do not write anything to the out pointer, since no binary formats are supported.
-        case 0x87FE: // GL_NUM_PROGRAM_BINARY_FORMATS
-        case 0x8DF9: // GL_NUM_SHADER_BINARY_FORMATS
-          ret = 0;
-          break;
-        case 0x86A2: // GL_NUM_COMPRESSED_TEXTURE_FORMATS
-          // WebGL doesn't have GL_NUM_COMPRESSED_TEXTURE_FORMATS (it's obsolete since GL_COMPRESSED_TEXTURE_FORMATS returns a JS array that can be queried for length),
-          // so implement it ourselves to allow C++ GLES2 code get the length.
-          var formats = GLctx.getParameter(0x86A3 /*GL_COMPRESSED_TEXTURE_FORMATS*/);
-          ret = formats ? formats.length : 0;
-          break;
-  
-        case 0x821D: // GL_NUM_EXTENSIONS
-          if (GL.currentContext.version < 2) {
-            GL.recordError(0x502 /* GL_INVALID_OPERATION */); // Calling GLES3/WebGL2 function with a GLES2/WebGL1 context
-            return;
-          }
-          // .getSupportedExtensions() can return null if context is lost, so coerce to empty array.
-          var exts = GLctx.getSupportedExtensions() || [];
-          ret = 2 * exts.length; // each extension is duplicated, first in unprefixed WebGL form, and then a second time with "GL_" prefix.
-          break;
-        case 0x821B: // GL_MAJOR_VERSION
-        case 0x821C: // GL_MINOR_VERSION
-          if (GL.currentContext.version < 2) {
-            GL.recordError(0x500); // GL_INVALID_ENUM
-            return;
-          }
-          ret = name_ == 0x821B ? 3 : 0; // return version 3.0
-          break;
-      }
-  
-      if (ret === undefined) {
-        var result = GLctx.getParameter(name_);
-        switch (typeof result) {
-          case "number":
-            ret = result;
-            break;
-          case "boolean":
-            ret = result ? 1 : 0;
-            break;
-          case "string":
-            GL.recordError(0x500); // GL_INVALID_ENUM
-            return;
-          case "object":
-            if (result === null) {
-              // null is a valid result for some (e.g., which buffer is bound - perhaps nothing is bound), but otherwise
-              // can mean an invalid name_, which we need to report as an error
-              switch (name_) {
-                case 0x8894: // ARRAY_BUFFER_BINDING
-                case 0x8B8D: // CURRENT_PROGRAM
-                case 0x8895: // ELEMENT_ARRAY_BUFFER_BINDING
-                case 0x8CA6: // FRAMEBUFFER_BINDING or DRAW_FRAMEBUFFER_BINDING
-                case 0x8CA7: // RENDERBUFFER_BINDING
-                case 0x8069: // TEXTURE_BINDING_2D
-                case 0x85B5: // WebGL 2 GL_VERTEX_ARRAY_BINDING, or WebGL 1 extension OES_vertex_array_object GL_VERTEX_ARRAY_BINDING_OES
-                case 0x8F36: // COPY_READ_BUFFER_BINDING or COPY_READ_BUFFER
-                case 0x8F37: // COPY_WRITE_BUFFER_BINDING or COPY_WRITE_BUFFER
-                case 0x88ED: // PIXEL_PACK_BUFFER_BINDING
-                case 0x88EF: // PIXEL_UNPACK_BUFFER_BINDING
-                case 0x8CAA: // READ_FRAMEBUFFER_BINDING
-                case 0x8919: // SAMPLER_BINDING
-                case 0x8C1D: // TEXTURE_BINDING_2D_ARRAY
-                case 0x806A: // TEXTURE_BINDING_3D
-                case 0x8E25: // TRANSFORM_FEEDBACK_BINDING
-                case 0x8C8F: // TRANSFORM_FEEDBACK_BUFFER_BINDING
-                case 0x8A28: // UNIFORM_BUFFER_BINDING
-                case 0x8514: { // TEXTURE_BINDING_CUBE_MAP
-                  ret = 0;
-                  break;
-                }
-                default: {
-                  GL.recordError(0x500); // GL_INVALID_ENUM
-                  return;
-                }
-              }
-            } else if (result instanceof Float32Array ||
-                       result instanceof Uint32Array ||
-                       result instanceof Int32Array ||
-                       result instanceof Array) {
-              for (var i = 0; i < result.length; ++i) {
-                switch (type) {
-                  case 0: HEAP32[(((p)+(i*4))>>2)] = result[i]; break;
-                  case 2: HEAPF32[(((p)+(i*4))>>2)] = result[i]; break;
-                  case 4: HEAP8[(((p)+(i))>>0)] = result[i] ? 1 : 0; break;
-                }
-              }
-              return;
-            } else {
-              try {
-                ret = result.name | 0;
-              } catch(e) {
-                GL.recordError(0x500); // GL_INVALID_ENUM
-                err('GL_INVALID_ENUM in glGet' + type + 'v: Unknown object returned from WebGL getParameter(' + name_ + ')! (error: ' + e + ')');
-                return;
-              }
-            }
-            break;
-          default:
-            GL.recordError(0x500); // GL_INVALID_ENUM
-            err('GL_INVALID_ENUM in glGet' + type + 'v: Native code calling glGet' + type + 'v(' + name_ + ') and it returns ' + result + ' of type ' + typeof(result) + '!');
-            return;
-        }
-      }
-  
-      switch (type) {
-        case 1: writeI53ToI64(p, ret); break;
-        case 0: HEAP32[((p)>>2)] = ret; break;
-        case 2:   HEAPF32[((p)>>2)] = ret; break;
-        case 4: HEAP8[((p)>>0)] = ret ? 1 : 0; break;
-      }
-    }
-  function _glGetIntegerv(name_, p) {
-      emscriptenWebGLGet(name_, p, 0);
     }
 
   function _glGetProgramInfoLog(program, maxLength, length, infoLog) {
@@ -6998,7 +6752,7 @@ var ASM_CONSTS = {
       return -1;
     }
 
-  function _glIsEnabled(x0) { return GLctx['isEnabled'](x0) }
+  function _glLineWidth(x0) { GLctx['lineWidth'](x0) }
 
   function _glLinkProgram(program) {
       program = GL.programs[program];
@@ -7008,8 +6762,6 @@ var ASM_CONSTS = {
       program.uniformSizeAndIdsByName = {};
   
     }
-
-  function _glScissor(x0, x1, x2, x3) { GLctx['scissor'](x0, x1, x2, x3) }
 
   function _glShaderSource(shader, count, string, length) {
       var source = GL.getSource(shader, count, string, length);
@@ -7143,6 +6895,57 @@ var ASM_CONSTS = {
     }
 
   var miniTempWebGLFloatBuffers = [];
+  function _glUniformMatrix2fv(location, count, transpose, value) {
+  
+      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+        count && GLctx.uniformMatrix2fv(webglGetUniformLocation(location), !!transpose, HEAPF32, value>>2, count*4);
+        return;
+      }
+  
+      if (count <= 72) {
+        // avoid allocation when uploading few enough uniforms
+        var view = miniTempWebGLFloatBuffers[4*count-1];
+        for (var i = 0; i < 4*count; i += 4) {
+          view[i] = HEAPF32[(((value)+(4*i))>>2)];
+          view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
+          view[i+2] = HEAPF32[(((value)+(4*i+8))>>2)];
+          view[i+3] = HEAPF32[(((value)+(4*i+12))>>2)];
+        }
+      } else
+      {
+        var view = HEAPF32.subarray((value)>>2, (value+count*16)>>2);
+      }
+      GLctx.uniformMatrix2fv(webglGetUniformLocation(location), !!transpose, view);
+    }
+
+  function _glUniformMatrix3fv(location, count, transpose, value) {
+  
+      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+        count && GLctx.uniformMatrix3fv(webglGetUniformLocation(location), !!transpose, HEAPF32, value>>2, count*9);
+        return;
+      }
+  
+      if (count <= 32) {
+        // avoid allocation when uploading few enough uniforms
+        var view = miniTempWebGLFloatBuffers[9*count-1];
+        for (var i = 0; i < 9*count; i += 9) {
+          view[i] = HEAPF32[(((value)+(4*i))>>2)];
+          view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
+          view[i+2] = HEAPF32[(((value)+(4*i+8))>>2)];
+          view[i+3] = HEAPF32[(((value)+(4*i+12))>>2)];
+          view[i+4] = HEAPF32[(((value)+(4*i+16))>>2)];
+          view[i+5] = HEAPF32[(((value)+(4*i+20))>>2)];
+          view[i+6] = HEAPF32[(((value)+(4*i+24))>>2)];
+          view[i+7] = HEAPF32[(((value)+(4*i+28))>>2)];
+          view[i+8] = HEAPF32[(((value)+(4*i+32))>>2)];
+        }
+      } else
+      {
+        var view = HEAPF32.subarray((value)>>2, (value+count*36)>>2);
+      }
+      GLctx.uniformMatrix3fv(webglGetUniformLocation(location), !!transpose, view);
+    }
+
   function _glUniformMatrix4fv(location, count, transpose, value) {
   
       if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -8102,9 +7905,6 @@ var asmLibraryArg = {
   "__assert_fail": ___assert_fail,
   "__cxa_allocate_exception": ___cxa_allocate_exception,
   "__cxa_throw": ___cxa_throw,
-  "__syscall_fcntl64": ___syscall_fcntl64,
-  "__syscall_ioctl": ___syscall_ioctl,
-  "__syscall_openat": ___syscall_openat,
   "_embind_register_bigint": __embind_register_bigint,
   "_embind_register_bool": __embind_register_bool,
   "_embind_register_emval": __embind_register_emval,
@@ -8120,10 +7920,12 @@ var asmLibraryArg = {
   "_emval_call_method": __emval_call_method,
   "_emval_call_void_method": __emval_call_void_method,
   "_emval_decref": __emval_decref,
+  "_emval_equals": __emval_equals,
   "_emval_get_global": __emval_get_global,
   "_emval_get_method_caller": __emval_get_method_caller,
   "_emval_get_property": __emval_get_property,
   "_emval_incref": __emval_incref,
+  "_emval_new": __emval_new,
   "_emval_new_cstring": __emval_new_cstring,
   "_emval_run_destructors": __emval_run_destructors,
   "_emval_set_property": __emval_set_property,
@@ -8131,6 +7933,7 @@ var asmLibraryArg = {
   "abort": _abort,
   "emscripten_asm_const_int": _emscripten_asm_const_int,
   "emscripten_get_now": _emscripten_get_now,
+  "emscripten_get_preloaded_image_data": _emscripten_get_preloaded_image_data,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
   "emscripten_set_keydown_callback_on_thread": _emscripten_set_keydown_callback_on_thread,
@@ -8148,19 +7951,15 @@ var asmLibraryArg = {
   "emscripten_webgl_make_context_current": _emscripten_webgl_make_context_current,
   "exit": _exit,
   "fd_close": _fd_close,
-  "fd_read": _fd_read,
   "fd_seek": _fd_seek,
   "fd_write": _fd_write,
   "glActiveTexture": _glActiveTexture,
   "glAttachShader": _glAttachShader,
   "glBindBuffer": _glBindBuffer,
+  "glBindFramebuffer": _glBindFramebuffer,
   "glBindTexture": _glBindTexture,
-  "glBindVertexArray": _glBindVertexArray,
-  "glBlendEquation": _glBlendEquation,
-  "glBlendEquationSeparate": _glBlendEquationSeparate,
-  "glBlendFuncSeparate": _glBlendFuncSeparate,
   "glBufferData": _glBufferData,
-  "glBufferSubData": _glBufferSubData,
+  "glCheckFramebufferStatus": _glCheckFramebufferStatus,
   "glClear": _glClear,
   "glClearColor": _glClearColor,
   "glCompileShader": _glCompileShader,
@@ -8170,27 +7969,22 @@ var asmLibraryArg = {
   "glDeleteProgram": _glDeleteProgram,
   "glDeleteShader": _glDeleteShader,
   "glDeleteTextures": _glDeleteTextures,
-  "glDeleteVertexArrays": _glDeleteVertexArrays,
-  "glDetachShader": _glDetachShader,
   "glDisable": _glDisable,
   "glDisableVertexAttribArray": _glDisableVertexAttribArray,
   "glDrawArrays": _glDrawArrays,
-  "glDrawElements": _glDrawElements,
   "glEnable": _glEnable,
   "glEnableVertexAttribArray": _glEnableVertexAttribArray,
+  "glFramebufferTexture2D": _glFramebufferTexture2D,
   "glGenBuffers": _glGenBuffers,
+  "glGenFramebuffers": _glGenFramebuffers,
   "glGenTextures": _glGenTextures,
-  "glGenVertexArrays": _glGenVertexArrays,
-  "glGetAttribLocation": _glGetAttribLocation,
-  "glGetIntegerv": _glGetIntegerv,
   "glGetProgramInfoLog": _glGetProgramInfoLog,
   "glGetProgramiv": _glGetProgramiv,
   "glGetShaderInfoLog": _glGetShaderInfoLog,
   "glGetShaderiv": _glGetShaderiv,
   "glGetUniformLocation": _glGetUniformLocation,
-  "glIsEnabled": _glIsEnabled,
+  "glLineWidth": _glLineWidth,
   "glLinkProgram": _glLinkProgram,
-  "glScissor": _glScissor,
   "glShaderSource": _glShaderSource,
   "glTexImage2D": _glTexImage2D,
   "glTexParameteri": _glTexParameteri,
@@ -8199,6 +7993,8 @@ var asmLibraryArg = {
   "glUniform2f": _glUniform2f,
   "glUniform3f": _glUniform3f,
   "glUniform4f": _glUniform4f,
+  "glUniformMatrix2fv": _glUniformMatrix2fv,
+  "glUniformMatrix3fv": _glUniformMatrix3fv,
   "glUniformMatrix4fv": _glUniformMatrix4fv,
   "glUseProgram": _glUseProgram,
   "glVertexAttribPointer": _glVertexAttribPointer,
@@ -8278,25 +8074,25 @@ var dynCall_i = Module["dynCall_i"] = createExportWrapper("dynCall_i");
 var dynCall_ii = Module["dynCall_ii"] = createExportWrapper("dynCall_ii");
 
 /** @type {function(...*):?} */
-var dynCall_vii = Module["dynCall_vii"] = createExportWrapper("dynCall_vii");
+var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
 
 /** @type {function(...*):?} */
-var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
+var dynCall_iiiii = Module["dynCall_iiiii"] = createExportWrapper("dynCall_iiiii");
 
 /** @type {function(...*):?} */
 var dynCall_viiii = Module["dynCall_viiii"] = createExportWrapper("dynCall_viiii");
 
 /** @type {function(...*):?} */
-var dynCall_viii = Module["dynCall_viii"] = createExportWrapper("dynCall_viii");
+var dynCall_viiiiiii = Module["dynCall_viiiiiii"] = createExportWrapper("dynCall_viiiiiii");
 
 /** @type {function(...*):?} */
-var dynCall_iii = Module["dynCall_iii"] = createExportWrapper("dynCall_iii");
+var dynCall_vii = Module["dynCall_vii"] = createExportWrapper("dynCall_vii");
 
 /** @type {function(...*):?} */
 var dynCall_viiiii = Module["dynCall_viiiii"] = createExportWrapper("dynCall_viiiii");
 
 /** @type {function(...*):?} */
-var dynCall_vff = Module["dynCall_vff"] = createExportWrapper("dynCall_vff");
+var dynCall_vif = Module["dynCall_vif"] = createExportWrapper("dynCall_vif");
 
 /** @type {function(...*):?} */
 var dynCall_viiiiii = Module["dynCall_viiiiii"] = createExportWrapper("dynCall_viiiiii");
@@ -8311,7 +8107,13 @@ var dynCall_viffffffff = Module["dynCall_viffffffff"] = createExportWrapper("dyn
 var dynCall_viffffiffffi = Module["dynCall_viffffiffffi"] = createExportWrapper("dynCall_viffffiffffi");
 
 /** @type {function(...*):?} */
-var dynCall_viiiiiii = Module["dynCall_viiiiiii"] = createExportWrapper("dynCall_viiiiiii");
+var dynCall_viffffif = Module["dynCall_viffffif"] = createExportWrapper("dynCall_viffffif");
+
+/** @type {function(...*):?} */
+var dynCall_viii = Module["dynCall_viii"] = createExportWrapper("dynCall_viii");
+
+/** @type {function(...*):?} */
+var dynCall_viiiif = Module["dynCall_viiiif"] = createExportWrapper("dynCall_viiiif");
 
 /** @type {function(...*):?} */
 var dynCall_viiiff = Module["dynCall_viiiff"] = createExportWrapper("dynCall_viiiff");
@@ -8698,6 +8500,7 @@ unexportedRuntimeSymbols.forEach(unexportedRuntimeSymbol);
 var missingLibrarySymbols = [
   'ptrToString',
   'stringToNewUTF8',
+  'setErrNo',
   'inetPton4',
   'inetNtop4',
   'inetPton6',
@@ -8716,10 +8519,13 @@ var missingLibrarySymbols = [
   'getDynCaller',
   'dynCall',
   'asmjsMangle',
+  'writeI53ToI64',
   'writeI53ToI64Clamped',
   'writeI53ToI64Signaling',
   'writeI53ToU64Clamped',
   'writeI53ToU64Signaling',
+  'readI53FromI64',
+  'readI53FromU64',
   'convertI32PairToI53',
   'convertU32PairToI53',
   'reallyNegative',
@@ -8765,12 +8571,14 @@ var missingLibrarySymbols = [
   'getCanvasElementSize',
   'getEnvStrings',
   'checkWasiClock',
+  'doReadv',
   'setImmediateWrapped',
   'clearImmediateWrapped',
   'polyfillSetImmediate',
   'exception_addRef',
   'exception_decRef',
   '_setNetworkCallback',
+  'emscriptenWebGLGet',
   'emscriptenWebGLGetUniform',
   'emscriptenWebGLGetVertexAttrib',
   'writeGLArray',
@@ -8823,7 +8631,6 @@ var missingLibrarySymbols = [
   'downcastPointer',
   'upcastPointer',
   'validateThis',
-  'craftEmvalAllocator',
 ];
 missingLibrarySymbols.forEach(missingLibrarySymbol)
 

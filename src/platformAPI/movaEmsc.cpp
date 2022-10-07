@@ -2,9 +2,6 @@
 #ifdef __EMSCRIPTEN__
 #include <map>
 #include <string>
-#include <chrono>
-#include <AL/al.h>
-#include <AL/alc.h>
 #include <emscripten.h>
 #include <emscripten/val.h>
 #include <emscripten/html5.h>
@@ -17,24 +14,12 @@ static V getOrDefault(const std::map<K, V>& m, const K& key, const V& def);
 static std::string color2str(Color color);
 static void loadImage(Image* img);
 static val getTempCanvas();
-EM_BOOL mouseScrollCallback(int eventType, const EmscriptenWheelEvent* e, void* userData);
-EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData);
-EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData);
-EM_BOOL pointerlockCallback(int eventType, const EmscriptenPointerlockChangeEvent* e, void* userData) { return false; }
 
-static float g_DeltaTime, g_ScrollX, g_ScrollY;
-static char g_CharPressed = '\0';
-static std::map<Key, uint8_t> g_KeyStates;
-static uint8_t g_MousePressed, g_MouseReleased, g_MouseHeld;
-static int g_MouseDeltaX, g_MouseDeltaY;
+static EM_BOOL mouseScrollCallback(int eventType, const EmscriptenWheelEvent* e, void* userData);
+static EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData);
+static EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData);
 
-static ScrollCallback g_UserScrollCallback;
-static MouseCallback g_UserMouseCallback;
-static KeyCallback g_UserKeyCallback;
-
-enum KeyState : uint8_t { KS_HELD = 0b0001, KS_PRESSED = 0b0010, KS_RELEASED = 0b0100, KS_REPEATED = 0b1000 };
-enum class ContextType { DEFAULT, RENDERER };
-ContextType contextType;
+/* --------------- Data struct --------------- */
 static WindowData* context;
 struct WindowData {
   inline WindowData() {}
@@ -64,83 +49,45 @@ struct FontData {
   std::string fontFamily;
 };
 
-float rendX(uint32_t x) { return x * 2.f / getViewportWidth() - 1.f; }
-float rendY(uint32_t y) { return y * -2.f / getViewportHeight() + 1.f; }
-float rendW(uint32_t w) { return w * 2.f / getViewportWidth(); }
-float rendH(uint32_t h) { return h * 2.f / getViewportHeight(); }
+/* --------------- API --------------- */
+void _clear(Color color) { _fillRect(0, 0, _getViewportWidth(), _getViewportHeight(), color); }
 
-void clear(Color color) {
-  if (contextType == ContextType::DEFAULT) fillRect(0, 0, getViewportWidth(), getViewportHeight(), color);
-  else if (contextType == ContextType::RENDERER) renderer->clear(color);
-  else MV_ERR("Clearing is not supported with this context type yet!");
+void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
+  context->context.set("strokeStyle", color2str(color));
+  context->context.set("lineWidth", thickness);
+  context->context.call<void>("beginPath");
+  context->context.call<void>("moveTo", x1, y1);
+  context->context.call<void>("lineTo", x2, y2);
+  context->context.call<void>("stroke");
 }
 
-void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
-  if (contextType == ContextType::DEFAULT) {
-    context->context.set("strokeStyle", color2str(color));
-    context->context.set("lineWidth", thickness);
-    context->context.call<void>("beginPath");
-    context->context.call<void>("moveTo", x1, y1);
-    context->context.call<void>("lineTo", x2, y2);
-    context->context.call<void>("stroke");
-  } else if (contextType == ContextType::RENDERER) renderer->drawLine(rendX(x1), rendY(y1), rendX(x2), rendY(y2), color, thickness);
-  else MV_ERR("Line drawing is not supported with this context type yet!");
+void _fillRect(int x, int y, int w, int h, Color color) {
+  context->context.set("fillStyle", color2str(color));
+  context->context.call<void>("fillRect", x, y, w, h);
 }
 
-void fillRect(int x, int y, int w, int h, Color color) {
-  if (contextType == ContextType::DEFAULT) {
-    context->context.set("fillStyle", color2str(color));
-    context->context.call<void>("fillRect", x, y, w, h);
-  } else if (contextType == ContextType::RENDERER) renderer->drawRect(rendX(x), rendY(y), rendW(w), rendH(h), color);
-  else MV_ERR("Rectangle filling is not supported with this context type yet!");
+void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
+  if (flip) {
+    context->context.call<void>("save");
+    context->context.call<void>("translate", (flip & FLIP_HORIZONTAL ? getViewportWidth() : 0), (flip & FLIP_VERTICAL ? getViewportHeight() : 0));
+    context->context.call<void>("scale", 1 * (flip & FLIP_HORIZONTAL ? -1 : 1), (flip & FLIP_VERTICAL ? -1 : 1));
+  }
+  context->context.set("imageSmoothingEnabled", image.data->antialiasing);
+  context->context.call<void>("drawImage", image.data->JSimage, srcX, srcY, srcW, srcH, (flip & FLIP_HORIZONTAL ? getViewportWidth() - x : x), (flip & FLIP_VERTICAL ? getViewportHeight() - y : y), w * (flip & FLIP_HORIZONTAL ? -1 : 1), h * (flip & FLIP_VERTICAL ? -1 : 1));
+  if (flip) context->context.call<void>("restore");
 }
 
-void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
-  if (contextType == ContextType::DEFAULT) {
-    if (flip) {
-      context->context.call<void>("save");
-      context->context.call<void>("translate", (flip & FLIP_HORIZONTAL ? getViewportWidth() : 0), (flip & FLIP_VERTICAL ? getViewportHeight() : 0));
-      context->context.call<void>("scale", 1 * (flip & FLIP_HORIZONTAL ? -1 : 1), (flip & FLIP_VERTICAL ? -1 : 1));
-    }
-    context->context.set("imageSmoothingEnabled", image.data->antialiasing);
-    context->context.call<void>("drawImage", image.data->JSimage, srcX, srcY, srcW, srcH, (flip & FLIP_HORIZONTAL ? getViewportWidth() - x : x), (flip & FLIP_VERTICAL ? getViewportHeight() - y : y), w * (flip & FLIP_HORIZONTAL ? -1 : 1), h * (flip & FLIP_VERTICAL ? -1 : 1));
-    if (flip) context->context.call<void>("restore");
-  } else MV_ERR("Image drawing is not supported with this context type yet!");
+void _drawText(int x, int y, std::string text, Color color) {
+  context->context.set("fillStyle", color2str(color));
+  context->context.call<void>("fillText", text, x, y + textHeight(text));
 }
 
-void drawText(int x, int y, std::string text, Color color) {
-  if (contextType == ContextType::DEFAULT) {
-    context->context.set("fillStyle", color2str(color));
-    context->context.call<void>("fillText", text, x, y + textHeight(text));
-  } else MV_ERR("Text is not supported with this context type yet!");
-}
+void _setFont(Font font, int size) { context->context.set("font", std::to_string(size) + "px " + font.data->fontFamily); }
+uint32_t _textWidth(std::string text) { return context->context.call<val>("measureText", text)["width"].as<uint32_t>(); }
+uint32_t _textHeight(std::string text) { return context->context.call<val>("measureText", text)["actualBoundingBoxAscent"].as<uint32_t>() + context->context.call<val>("measureText", text)["actualBoundingBoxDescent"].as<uint32_t>(); }
 
-void setFont(Font font, int size) {
-  if (contextType == ContextType::DEFAULT) context->context.set("font", std::to_string(size) + "px " + font.data->fontFamily);
-  else MV_ERR("Text is supported with this context type yet!");
-}
-
-uint32_t textWidth(std::string text) {
-  if (contextType == ContextType::DEFAULT) return context->context.call<val>("measureText", text)["width"].as<uint32_t>();
-  else MV_ERR("Text is supported with this context type yet!");
-  return 0;
-}
-
-uint32_t textHeight(std::string text) {
-  if (contextType == ContextType::DEFAULT) return context->context.call<val>("measureText", text)["actualBoundingBoxAscent"].as<uint32_t>() + context->context.call<val>("measureText", text)["actualBoundingBoxDescent"].as<uint32_t>();
-  else MV_ERR("Text is supported with this context type yet!");
-  return 0;
-}
-
-uint32_t getViewportWidth() {
-  if (contextType == ContextType::RENDERER && renderer->getTargetWidth()) return renderer->getTargetWidth();
-  return context->canvas["width"].as<uint32_t>();
-}
-
-uint32_t getViewportHeight() {
-  if (contextType == ContextType::RENDERER && renderer->getTargetHeight()) return renderer->getTargetHeight();
-  return context->canvas["height"].as<uint32_t>();
-}
+uint32_t _getViewportWidth() { return context->canvas["width"].as<uint32_t>(); }
+uint32_t _getViewportHeight() { return context->canvas["height"].as<uint32_t>(); }
 
 void setContext(const Window& window) {
   context = window.data;
@@ -153,41 +100,13 @@ void setContext(const Window& window) {
   }
 }
 
-void nextFrame() {
-  static auto t = std::chrono::steady_clock::now();
-  g_DeltaTime = (std::chrono::steady_clock::now() - t).count() / 1000000000.0;
-  t = std::chrono::steady_clock::now();
-  for (auto& key : g_KeyStates) {
-    key.second &= KS_HELD;
-  }
-  g_MousePressed = g_MouseReleased = 0;
-  g_MouseDeltaX = g_MouseDeltaY = 0;
-  g_ScrollX = g_ScrollY = 0;
-  g_CharPressed = '\0';
+void _nextFrame() {
   emscripten_webgl_commit_frame();
   emscripten_sleep(0);
 }
 
-float deltaTime() { return g_DeltaTime > 0 ? g_DeltaTime : 1.f / 60.f; }
-
-char getCharPressed() { return g_CharPressed; }
-bool isKeyHeld(Key key) { return (g_KeyStates[key] & KS_HELD) != 0; }
-bool isKeyPressed(Key key) { return (g_KeyStates[key] & KS_PRESSED) != 0; }
-bool isKeyReleased(Key key) { return (g_KeyStates[key] & KS_RELEASED) != 0; }
-bool isKeyRepeated(Key key) { return (g_KeyStates[key] & KS_REPEATED) != 0; }
-
-bool isMouseButtonHeld(MouseButton button) { return (g_MouseHeld & button) != 0; }
-bool isMouseButtonPressed(MouseButton button) { return (g_MousePressed & button) != 0; }
-bool isMouseButtonReleased(MouseButton button) { return (g_MouseReleased & button) != 0; }
-
 int getMouseX() { return context->mouseX; }
 int getMouseY() { return context->mouseY; }
-
-int getMouseDeltaX() { return g_MouseDeltaX; }
-int getMouseDeltaY() { return g_MouseDeltaY; }
-
-float getScrollX() { return g_ScrollX; }
-float getScrollY() { return g_ScrollY; }
 
 void pointerLock(bool state) {
   EmscriptenPointerlockChangeEvent e;
@@ -197,10 +116,7 @@ void pointerLock(bool state) {
   else if (e.isActive && !state) emscripten_exit_pointerlock();
 }
 
-void setScrollCallback(ScrollCallback callback) { g_UserScrollCallback = callback; }
-void setMouseCallback(MouseCallback callback) { g_UserMouseCallback = callback; }
-void setKeyCallback(KeyCallback callback) { g_UserKeyCallback = callback; }
-
+/* --------------- Structs --------------- */
 Window::Window(std::string_view title, RendererConstructor createRenderer) : data(new WindowData()) {
   emscripten_set_window_title(title.data());
   // clang-format off
@@ -223,7 +139,6 @@ Window::Window(std::string_view title, RendererConstructor createRenderer) : dat
   emscripten_set_wheel_callback("#canvas", nullptr, false, mouseScrollCallback);
   emscripten_set_keydown_callback("#canvas", (void*)true, true, keyCallback);
   emscripten_set_keyup_callback("#canvas", (void*)false, true, keyCallback);
-  emscripten_set_pointerlockchange_callback("#canvas", nullptr, true, pointerlockCallback);
   setContext(*this);
 }
 
@@ -384,39 +299,19 @@ EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userDa
   WindowData* windowData = ((Window*)userData)->data;
   windowData->mouseX = e->targetX;
   windowData->mouseY = e->targetY;
-  g_MouseDeltaX = e->movementX;
-  g_MouseDeltaY = e->movementY;
-  g_MousePressed = ~g_MouseHeld & e->buttons;
-  g_MouseReleased = g_MouseHeld & ~e->buttons;
-  g_MouseHeld = e->buttons;
-  if (g_UserMouseCallback) {
-    MouseButton button = (MouseButton)(1 << e->button);
-    g_UserMouseCallback(((Window*)userData), windowData->mouseX, windowData->mouseY, button, isMouseButtonHeld(button));
-  }
+  _mouseCallback((Window*)userData, e->targetX, e->targetY, e->movementX, e->movementY, e->buttons);
   return true;
 }
 
 EM_BOOL mouseScrollCallback(int eventType, const EmscriptenWheelEvent* e, void* userData) {
-  g_ScrollX += e->deltaX / 125;
-  g_ScrollY -= e->deltaY / 125;
-  if (g_UserScrollCallback) {
-    g_UserScrollCallback(e->deltaX / 125, -e->deltaY / 125);
-  }
+  _mouseScrollCallback(e->deltaX / 125, -e->deltaY / 125);
   return true;
 }
 
 EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData) {
   bool state = (bool)userData;
   Key key = getOrDefault(keyMap, std::string(e->code), Key::Unknown);
-  if (state) g_CharPressed = e->key[1] == '\0' ? e->key[0] : '\0';
-  if (!e->repeat) {
-    g_KeyStates[key] = state ? KS_PRESSED | KS_HELD : KS_RELEASED;
-    if (g_UserKeyCallback) {
-      g_UserKeyCallback(key, g_CharPressed, state);
-    }
-  } else if (state) {
-    g_KeyStates[key] |= KS_REPEATED;
-  }
+  _keyCallback(key, state && e->key[1] == '\0' ? e->key[0] : '\0', state, e->repeat);
   return !(key == Key::I && e->ctrlKey && e->shiftKey || key == Key::F5);
 }
 }  // namespace Mova
