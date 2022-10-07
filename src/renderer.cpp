@@ -2,7 +2,6 @@
 #include <stdio.h>
 
 Renderer* renderer = nullptr;
-std::unordered_map<unsigned int, unsigned int> __mova__references;
 
 Model loadOBJ(std::string_view filepath, unsigned int uvscale) {
   std::vector<float> tvertices, tnormals, tuvs;
@@ -54,8 +53,8 @@ Model loadOBJ(std::string_view filepath, unsigned int uvscale) {
   }
 
   std::shared_ptr<std::vector<VertexAttribArray>> attribArrays(new std::vector<VertexAttribArray>());
-  attribArrays.get()->push_back(renderer->createVertexAttribArray(vertices));
-  attribArrays.get()->push_back(renderer->createVertexAttribArray(uvs, 2));
-  attribArrays.get()->push_back(renderer->createVertexAttribArray(normals));
+  attribArrays->push_back(renderer->createVertexAttribArray(vertices));
+  attribArrays->push_back(renderer->createVertexAttribArray(uvs, 2));
+  attribArrays->push_back(renderer->createVertexAttribArray(normals));
   return Model{.m_AttribArrays = attribArrays, .m_VertexCount = vertices.size() / 3};
 }
