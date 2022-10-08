@@ -325,7 +325,8 @@ void setCursor(Image cursor, int x, int y) {
     loadImage(&cursor);
     cursor.data->changed = false;
   }
-  context->canvas["style"].set("cursor", "url(" + cursor.data->dataURL.as<std::string>() + "), auto");
+  if (x != 0 && y != 0) context->canvas["style"].set("cursor", "url(" + cursor.data->dataURL.as<std::string>() + "), " + std::to_string(x) + ", " + std::to_string(y) + ", auto");
+  else context->canvas["style"].set("cursor", "url(" + cursor.data->dataURL.as<std::string>() + "), auto");
 }
 
 void pointerLock(bool state) {
