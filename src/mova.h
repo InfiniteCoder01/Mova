@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string_view>
 
 #include "renderer.h"
@@ -16,37 +17,39 @@ struct AudioData;
 struct FontData;
 struct Window {
   Window(std::string_view title, RendererConstructor renderer = nullptr);
-  ~Window();
 
-  WindowData* data;
+  std::shared_ptr<WindowData> data = nullptr;
 };
 
 struct Image {
   Image() = default;
   Image(std::string_view filename, bool antialiasing = false);
   Image(int width, int height, const char* content = nullptr, bool antialiasing = false);
-  ~Image();
 
-  Texture asTexture(bool tiling = false);
+  Texture asTexture(bool mutible = false, bool tiling = false);
+  void setPixel(int x, int y, Color color);
+
+#if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
+  void setPixel(glm::vec2 pos, Color color) { setPixel(pos.x, pos.y, color); }
+  glm::vec2 size() { return glm::vec2(width, height); }
+#endif
 
   int width, height;
-  ImageData* data;
+  std::shared_ptr<ImageData> data = nullptr;
 };
 
 struct Audio {
   Audio() = default;
   Audio(std::string filename);
-  ~Audio();
 
-  AudioData* data;
+  std::shared_ptr<AudioData> data = nullptr;
 };
 
 struct Font {
   Font() = default;
   Font(std::string filename);
-  ~Font();
 
-  FontData* data;
+  std::shared_ptr<FontData> data = nullptr;
 };
 
 enum MouseButton : uint8_t {
@@ -83,12 +86,12 @@ enum class Key {
 };
 // clang-format on
 
-void clear(Color color = black);
+void clear(Color color = Color::black);
 void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness = 3);
 void fillRect(int x, int y, int w, int h, Color color);
 void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
-void drawText(int x, int y, std::string text, Color color = white);
+void drawText(int x, int y, std::string text, Color color = Color::white);
 void setFont(Font font, int size);
 uint32_t textWidth(std::string text);
 uint32_t textHeight(std::string text);
@@ -134,7 +137,7 @@ void setKeyCallback(KeyCallback callback);
 inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
 inline void fillRect(glm::vec2 pos, glm::vec2 size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
 inline void drawImage(Image& image, glm::vec2 pos, glm::vec2 size = glm::vec2(-1), Flip flip = FLIP_NONE, glm::vec2 srcPos = glm::vec2(0), glm::vec2 srcSize = glm::vec2(-1)) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
-inline void drawText(glm::vec2 pos, std::string text, Color color = white) { drawText(pos.x, pos.y, text, color); }
+inline void drawText(glm::vec2 pos, std::string text, Color color = Color::white) { drawText(pos.x, pos.y, text, color); }
 inline glm::vec2 textSize(std::string text) { return glm::vec2(textWidth(text), textHeight(text)); }
 inline glm::vec2 getViewportSize() { return glm::vec2(getViewportWidth(), getViewportHeight()); }
 inline glm::vec2 getMousePos() { return glm::vec2(getMouseX(), getMouseY()); }

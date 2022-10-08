@@ -21,17 +21,20 @@ const uint8_t defaultTexture[] = {255, 255, 255, 255};
 
 class OpenGLRenderer : public Renderer {
  public:
-  OpenGLRenderer() : m_DefaultTexture(createTexture(1, 1, (const char*)defaultTexture, false, false)) {}
+  OpenGLRenderer() : m_DefaultTexture(createTexture(1, 1, (const char*)defaultTexture, false, false, false)) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  }
 
-  VertexAttribArray createVertexAttribArray(const std::vector<float>& array, unsigned int elementSize) override {
+  VertexAttribArray createVertexAttribArray(const std::vector<float>& array, unsigned int elementSize, bool mutible) override {
     VertexAttribArray vertices = VertexAttribArray(new _VertexAttribArray(GL_FLOAT, elementSize), destroyVertexAttribArray);
     glGenBuffers(1, &vertices->ptr);
     glBindBuffer(GL_ARRAY_BUFFER, vertices->ptr);
-    glBufferData(GL_ARRAY_BUFFER, array.size() * sizeof(float), array.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, array.size() * sizeof(float), array.data(), mutible ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
     return vertices;
   }
 
-  Texture createTexture(const uint32_t width, const uint32_t height, const char* data, bool antialiasing, bool tiling) override {
+  Texture createTexture(const uint32_t width, const uint32_t height, const char* data, bool antialiasing, bool mutible, bool tiling) override {
     unsigned int texture;
     glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
@@ -43,6 +46,13 @@ class OpenGLRenderer : public Renderer {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, tiling ? GL_REPEAT : GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
     return Texture(new unsigned int(texture), destroyTexture);
+  }
+
+  void modifyTexture(Texture& texture, const uint32_t width, const uint32_t height, const char* data = nullptr, bool antialiasing = false, bool mutible = false, bool tiling = false) override {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, *texture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
   }
 
   Shader createShader(const std::string_view& vert, const std::string_view& frag) override {
@@ -132,7 +142,7 @@ class OpenGLRenderer : public Renderer {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, *texture);
     setShaderInt(*m_Shader, "u_Texture", 0);
-    setShaderColor(*m_Shader, "u_Color", white);
+    setShaderColor(*m_Shader, "u_Color", Color::white);
   }
 
   void setViewport(int x, int y, int width, int height) override { glViewport(x, y, width, height); }
@@ -145,7 +155,7 @@ class OpenGLRenderer : public Renderer {
   }
 
   void clear(Color color) override {
-    glClearColor(color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0);
+    glClearColor(color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
 
@@ -176,7 +186,7 @@ class OpenGLRenderer : public Renderer {
   void setShaderInt(const Shader& shader, const std::string_view& name, int value) override { glUniform1i(glGetUniformLocation(*shader, name.data()), value); }
   void setShaderBool(const Shader& shader, const std::string_view& name, bool value) override { glUniform1i(glGetUniformLocation(*shader, name.data()), (int)value); }
   void setShaderFloat(const Shader& shader, const std::string_view& name, float value) override { glUniform1f(glGetUniformLocation(*shader, name.data()), value); }
-  void setShaderColor(const Shader& shader, const std::string_view& name, Color value) override { setShaderVec4(shader, name, value.red / 255.0, value.green / 255.0, value.blue / 255.0, value.alpha / 255.0); }
+  void setShaderColor(const Shader& shader, const std::string_view& name, Color value) override { setShaderVec4(shader, name, value.r / 255.0, value.g / 255.0, value.b / 255.0, value.a / 255.0); }
 
  private:
   const Shader* m_Shader;

@@ -22,9 +22,6 @@ static EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* e, void
 /* --------------- Data struct --------------- */
 static WindowData* context;
 struct WindowData {
-  inline WindowData() {}
-  inline ~WindowData() {}
-
   Renderer* renderer = nullptr;
   int mouseX, mouseY;
   val canvas;
@@ -32,21 +29,26 @@ struct WindowData {
     val context;
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glContext = 0;
   };
+
+  inline WindowData() {}
+  ~WindowData();
 };
 
 struct ImageData {
   Texture texture;
-  bool antialiasing, immContent = false;
-  const char* content;
+  bool antialiasing, immContent = false, changed = false, tchanged = false;
+  char* content;
   val JSimage;
+  ~ImageData();
 };
 
 struct AudioData {
-  //
+  ~AudioData();
 };
 
 struct FontData {
   std::string fontFamily;
+  ~FontData();
 };
 
 /* --------------- API --------------- */
@@ -67,6 +69,10 @@ void _fillRect(int x, int y, int w, int h, Color color) {
 }
 
 void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
+  if (image.data->changed) {
+    loadImage(&image);
+    image.data->changed = false;
+  }
   if (flip) {
     context->context.call<void>("save");
     context->context.call<void>("translate", (flip & FLIP_HORIZONTAL ? getViewportWidth() : 0), (flip & FLIP_VERTICAL ? getViewportHeight() : 0));
@@ -90,7 +96,7 @@ uint32_t _getViewportWidth() { return context->canvas["width"].as<uint32_t>(); }
 uint32_t _getViewportHeight() { return context->canvas["height"].as<uint32_t>(); }
 
 void setContext(const Window& window) {
-  context = window.data;
+  context = window.data.get();
   if (context->renderer) {
     contextType = ContextType::RENDERER;
     renderer = context->renderer;
@@ -111,7 +117,6 @@ int getMouseY() { return context->mouseY; }
 void pointerLock(bool state) {
   EmscriptenPointerlockChangeEvent e;
   emscripten_get_pointerlock_status(&e);
-  printf("%d, %d\n", e.isActive, state);
   if (!e.isActive && state) emscripten_request_pointerlock("#canvas", true);
   else if (e.isActive && !state) emscripten_exit_pointerlock();
 }
@@ -142,17 +147,17 @@ Window::Window(std::string_view title, RendererConstructor createRenderer) : dat
   setContext(*this);
 }
 
-Window::~Window() {
-  if (data->renderer) {
-    emscripten_webgl_destroy_context(data->glContext);
-    delete data->renderer;
+WindowData::~WindowData() {
+  if (renderer) {
+    emscripten_webgl_destroy_context(glContext);
+    delete renderer;
   }
 }
 
 Image::Image(std::string_view filename, bool antialiasing) : data(new ImageData()) {
   data->antialiasing = antialiasing;
   data->content = emscripten_get_preloaded_image_data(filename.data(), &width, &height);
-  loadImage(this);
+  data->changed = data->tchanged = true;
 }
 
 Image::Image(int width, int height, const char* content, bool antialiasing) : data(new ImageData()), width(width), height(height) {
@@ -168,22 +173,35 @@ Image::Image(int width, int height, const char* content, bool antialiasing) : da
     data->content = emptyContent;
     data->immContent = true;
   } else {
-    data->content = content;
+    data->content = (char*)content;
   }
-  loadImage(this);
+  data->changed = data->tchanged = true;
 }
 
-Image::~Image() {
-  if (!data->immContent) {
-    free((void*)data->content);
+ImageData::~ImageData() {
+  if (!immContent) {
+    free((void*)content);
   }
 }
 
-Texture Image::asTexture(bool tiling) {
+Texture Image::asTexture(bool mutible, bool tiling) {
   if (!data->texture) {
-    data->texture = renderer->createTexture(width, height, data->content, data->antialiasing, tiling);
+    data->texture = renderer->createTexture(width, height, data->content, data->antialiasing, mutible, tiling);
+    data->tchanged = false;
+  }
+  if (data->tchanged) {
+    renderer->modifyTexture(data->texture, width, height, data->content, data->antialiasing, mutible, tiling);
+    data->tchanged = false;
   }
   return data->texture;
+}
+
+void Image::setPixel(int x, int y, Color color) {
+  data->content[(x + y * width) * 4] = color.r;
+  data->content[(x + y * width) * 4 + 1] = color.g;
+  data->content[(x + y * width) * 4 + 2] = color.b;
+  data->content[(x + y * width) * 4 + 3] = color.a;
+  data->changed = data->tchanged = true;
 }
 
 Audio::Audio(std::string filename) : data(new AudioData()) {
@@ -211,7 +229,7 @@ Audio::Audio(std::string filename) : data(new AudioData()) {
   // data->fontFamily = filename;
 }
 
-Audio::~Audio() = default;
+AudioData::~AudioData() = default;
 
 Font::Font(std::string filename) : data(new FontData()) {
   // clang-format off
@@ -229,11 +247,11 @@ Font::Font(std::string filename) : data(new FontData()) {
   data->fontFamily = filename;
 }
 
-Font::~Font() = default;
+FontData::~FontData() = default;
 
 static std::string color2str(Color color) {
   char result[] = "#ffffffff";
-  sprintf(result, "#%02x%02x%02x%02x", color.red, color.green, color.blue, color.alpha);
+  sprintf(result, "#%02x%02x%02x%02x", color.r, color.g, color.b, color.a);
   return std::string(result);
 }
 
@@ -296,7 +314,7 @@ std::map<std::string, Key> keyMap = {
 
 /*                    CALLBACKS                    */
 EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData) {
-  WindowData* windowData = ((Window*)userData)->data;
+  WindowData* windowData = ((Window*)userData)->data.get();
   windowData->mouseX = e->targetX;
   windowData->mouseY = e->targetY;
   _mouseCallback((Window*)userData, e->targetX, e->targetY, e->movementX, e->movementY, e->buttons);
