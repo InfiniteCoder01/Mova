@@ -16,10 +16,10 @@ static KeyCallback g_UserKeyCallback;
 enum KeyState : uint8_t { KS_HELD = 0b0001, KS_PRESSED = 0b0010, KS_RELEASED = 0b0100, KS_REPEATED = 0b1000 };
 ContextType contextType;
 
-float rendX(uint32_t x) { return x * 2.f / getViewportWidth() - 1.f; }
-float rendY(uint32_t y) { return y * -2.f / getViewportHeight() + 1.f; }
-float rendW(uint32_t w) { return w * 2.f / getViewportWidth(); }
-float rendH(uint32_t h) { return h * 2.f / getViewportHeight(); }
+float rendX(int x) { return x * 2.f / getViewportWidth() - 1.f; }
+float rendY(int y) { return y * -2.f / getViewportHeight() + 1.f; }
+float rendW(int w) { return w * 2.f / getViewportWidth(); }
+float rendH(int h) { return h * 2.f / getViewportHeight(); }
 
 void clear(Color color) {
   if (contextType == ContextType::DEFAULT) _clear(color);
@@ -45,7 +45,13 @@ void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, in
   if (srcW == -1) srcW = image.width;
   if (srcH == -1) srcH = image.height;
   if (contextType == ContextType::DEFAULT) _drawImage(image, x, y, w, h, flip, srcX, srcY, srcW, srcH);
-  else MV_ERR("Image drawing is not supported with this context type yet!");
+  else if (contextType == ContextType::RENDERER) {
+    float uv1x = srcX / (float)image.width, uv1y = srcY / (float)image.height;
+    float uv2x = uv1x + srcW / (float)image.width, uv2y = uv1y + srcH / (float)image.height;
+    if(flip & FLIP_HORIZONTAL) std::swap(uv1x, uv2x);
+    if(flip & FLIP_VERTICAL) std::swap(uv1y, uv2y);
+    renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), image.asTexture(), 1 - uv1x, 1 - uv2y, 1 - uv2x, 1 - uv1y);
+  } else MV_ERR("Image drawing is not supported with this context type yet!");
 }
 
 void drawText(int x, int y, std::string text, Color color) {
