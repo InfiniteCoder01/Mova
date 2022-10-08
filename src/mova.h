@@ -102,6 +102,7 @@ enum class Key {
 
 void clear(Color color = Color::black);
 void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness = 3);
+void drawRect(int x, int y, int w, int h, Color color, int thickness = 3);
 void fillRect(int x, int y, int w, int h, Color color);
 void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
@@ -151,6 +152,7 @@ void setKeyCallback(KeyCallback callback);
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
 inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
+inline void drawRect(glm::vec2 pos, glm::vec2 size, Color color, int thickness = 3) { drawRect(pos.x, pos.y, size.x, size.y, color, thickness); }
 inline void fillRect(glm::vec2 pos, glm::vec2 size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
 inline void drawImage(Image& image, glm::vec2 pos, glm::vec2 size = glm::vec2(-1), Flip flip = FLIP_NONE, glm::vec2 srcPos = glm::vec2(0), glm::vec2 srcSize = glm::vec2(-1)) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
 inline void drawText(glm::vec2 pos, std::string text, Color color = Color::white) { drawText(pos.x, pos.y, text, color); }
@@ -164,6 +166,7 @@ inline glm::vec2 getScroll() { return glm::vec2(getScrollX(), getScrollY()); }
 
 void _clear(Color color);
 void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness);
+void _drawRect(int x, int y, int w, int h, Color color, int thickness);
 void _fillRect(int x, int y, int w, int h, Color color);
 void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH);
 void _drawText(int x, int y, std::string text, Color color);

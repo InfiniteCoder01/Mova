@@ -161,7 +161,9 @@ class OpenGLRenderer : public Renderer {
 
   void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, RenderType type) override {
     unsigned int glType;
+    if (type == RenderType::TRIANGLE_FAN) glType = GL_TRIANGLE_FAN;
     if (type == RenderType::TRIANGLES) glType = GL_TRIANGLES;
+    if (type == RenderType::LINE_STRIP) glType = GL_LINE_STRIP;
     if (type == RenderType::LINES) glType = GL_LINES;
     setVertexAttribArrays(arrays);
     glDrawArrays(glType, 0, count);

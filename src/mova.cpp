@@ -33,6 +33,14 @@ void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
   else MV_ERR("Line drawing is not supported with this context type yet!");
 }
 
+void drawRect(int x, int y, int w, int h, Color color, int thickness) {
+  if (contextType == ContextType::DEFAULT) _drawRect(x, y, w, h, color, thickness);
+  else if (contextType == ContextType::RENDERER) {
+    renderer->setThickness(thickness);
+    renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), color, RenderType::LINE_STRIP);
+  } else MV_ERR("Rectangle filling is not supported with this context type yet!");
+}
+
 void fillRect(int x, int y, int w, int h, Color color) {
   if (contextType == ContextType::DEFAULT) _fillRect(x, y, w, h, color);
   else if (contextType == ContextType::RENDERER) renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), color);
@@ -48,8 +56,8 @@ void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, in
   else if (contextType == ContextType::RENDERER) {
     float uv1x = srcX / (float)image.width, uv1y = srcY / (float)image.height;
     float uv2x = uv1x + srcW / (float)image.width, uv2y = uv1y + srcH / (float)image.height;
-    if(flip & FLIP_HORIZONTAL) std::swap(uv1x, uv2x);
-    if(flip & FLIP_VERTICAL) std::swap(uv1y, uv2y);
+    if (flip & FLIP_HORIZONTAL) std::swap(uv1x, uv2x);
+    if (flip & FLIP_VERTICAL) std::swap(uv1y, uv2y);
     renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), image.asTexture(), 1 - uv1x, 1 - uv2y, 1 - uv2x, 1 - uv1y);
   } else MV_ERR("Image drawing is not supported with this context type yet!");
 }

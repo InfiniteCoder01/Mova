@@ -20,8 +20,10 @@ html/index.html: $(ImGUI_OBJ) $(Mova_OBJ) $(FILES)
 
 $(ImGUI_OBJ): $(ImGUI)/*.cpp $(ImGUI)/*.h $(ImGUI)/backends/imgui_impl_opengl3.cpp $(ImGUI)/backends/imgui_impl_opengl3.h
 	@echo Building ImGUI...
+	@mkdir build\ImGUI
 	@for %%f in ($(wildcard $(ImGUI)/*.cpp $(ImGUI)/backends/imgui_impl_opengl3.cpp)) do @$(CXX) -c %%f $(Flags) $(Include) -o build/ImGUI/%%~nxf.o
 
 $(Mova_OBJ): $(Mova)/*.cpp $(Mova)/*/*.cpp $(Mova)/*.h
 	@echo Building Mova...
+	@mkdir build\Mova
 	@for %%f in ($(wildcard $(Mova)/*.cpp $(Mova)/*/*.cpp)) do @$(CXX) -c %%f $(Flags) $(Include) -o build/Mova/%%~nxf.o

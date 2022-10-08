@@ -64,6 +64,11 @@ void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
   context->context.call<void>("stroke");
 }
 
+void _drawRect(int x, int y, int w, int h, Color color, int thickness) {
+  context->context.set("strokeStyle", color2str(color));
+  context->context.call<void>("strokeRect", x, y, w, h);
+}
+
 void _fillRect(int x, int y, int w, int h, Color color) {
   context->context.set("fillStyle", color2str(color));
   context->context.call<void>("fillRect", x, y, w, h);
