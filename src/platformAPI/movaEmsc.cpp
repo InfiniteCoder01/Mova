@@ -38,6 +38,7 @@ struct ImageData {
   Texture texture;
   bool antialiasing, immContent = false, changed = false, tchanged = false;
   char* content;
+  val dataURL;
   val JSimage;
   ~ImageData();
 };
@@ -113,13 +114,6 @@ void _nextFrame() {
 
 int getMouseX() { return context->mouseX; }
 int getMouseY() { return context->mouseY; }
-
-void pointerLock(bool state) {
-  EmscriptenPointerlockChangeEvent e;
-  emscripten_get_pointerlock_status(&e);
-  if (!e.isActive && state) emscripten_request_pointerlock("#canvas", true);
-  else if (e.isActive && !state) emscripten_exit_pointerlock();
-}
 
 /* --------------- Structs --------------- */
 Window::Window(std::string_view title, RendererConstructor createRenderer) : data(new WindowData()) {
@@ -261,7 +255,8 @@ static void loadImage(Image* img) {
   getTempCanvas().set("height", img->height);
   getTempCanvas().call<val>("getContext", val("2d")).call<void>("putImageData", imageData, 0, 0);
   img->data->JSimage = val::global("Image").new_();
-  img->data->JSimage.set("src", getTempCanvas().call<val>("toDataURL"));
+  img->data->dataURL = getTempCanvas().call<val>("toDataURL");
+  img->data->JSimage.set("src", img->data->dataURL);
 }
 
 static val getTempCanvas() {
@@ -310,7 +305,35 @@ std::map<std::string, Key> keyMap = {
   {"F1", Key::F1}, {"F2", Key::F2}, {"F3", Key::F3}, {"F4", Key::F4}, {"F5", Key::F5}, {"F6", Key::F6},
   {"F7", Key::F7}, {"F8", Key::F8}, {"F9", Key::F9}, {"F10", Key::F10}, {"F11", Key::F11}, {"F12", Key::F12},
 };
+
+std::map<Cursor, std::string> cursorMap = {
+  {Cursor::Default, "default"}, {Cursor::None, "none"},
+  {Cursor::ContextMenu, "context-menu"}, {Cursor::Help, "help"}, {Cursor::Pointer, "pointer"},
+  {Cursor::Progress, "progress"}, {Cursor::Wait, "wait"},
+  {Cursor::Crosshair, "crosshair"}, {Cursor::Text, "text"}, {Cursor::Alias, "alias"},
+  {Cursor::Move, "move"}, {Cursor::NotAllowed, "not-allowed"},
+  {Cursor::Grab, "grab"}, {Cursor::Grabbing, "grabbing"},
+  {Cursor::ColResize, "col-resize"}, {Cursor::RowResize, "row-resize"},
+  {Cursor::NSResize, "ns-resize"}, {Cursor::EWResize, "ew-resize"}, {Cursor::NESWResize, "nesw-resize"}, {Cursor::NWSEResize, "nwse-resize"},
+  {Cursor::ZoomIn, "zoom-in"}, {Cursor::ZoomOut, "zoom-out"},
+};
 // clang-format on
+
+void setCursor(Cursor cursor) { context->canvas["style"].set("cursor", cursorMap[cursor]); }
+void setCursor(Image cursor, int x, int y) {
+  if (cursor.data->changed) {
+    loadImage(&cursor);
+    cursor.data->changed = false;
+  }
+  context->canvas["style"].set("cursor", "url(" + cursor.data->dataURL.as<std::string>() + "), auto");
+}
+
+void pointerLock(bool state) {
+  EmscriptenPointerlockChangeEvent e;
+  emscripten_get_pointerlock_status(&e);
+  if (!e.isActive && state) emscripten_request_pointerlock("#canvas", true);
+  else if (e.isActive && !state) emscripten_exit_pointerlock();
+}
 
 /*                    CALLBACKS                    */
 EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData) {

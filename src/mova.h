@@ -66,6 +66,18 @@ enum Flip : uint8_t {
 };
 
 // clang-format off
+enum class Cursor {
+  Default, None,
+  ContextMenu, Help, Pointer,
+  Progress, Wait,
+  Crosshair, Text, Alias,
+  Move, NotAllowed,
+  Grab, Grabbing,
+  ColResize, RowResize,
+  NSResize, EWResize, NESWResize, NWSEResize,
+  ZoomIn, ZoomOut,
+};
+
 enum class Key {
   Tab,
   ArrowLeft, ArrowRight, ArrowUp, ArrowDown,
@@ -123,6 +135,8 @@ int getMouseDeltaY();
 float getScrollX();
 float getScrollY();
 
+void setCursor(Cursor cursor);
+void setCursor(Image cursor, int x = 0, int y = 0);
 void pointerLock(bool state);
 
 using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
@@ -138,6 +152,7 @@ inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 
 inline void fillRect(glm::vec2 pos, glm::vec2 size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
 inline void drawImage(Image& image, glm::vec2 pos, glm::vec2 size = glm::vec2(-1), Flip flip = FLIP_NONE, glm::vec2 srcPos = glm::vec2(0), glm::vec2 srcSize = glm::vec2(-1)) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
 inline void drawText(glm::vec2 pos, std::string text, Color color = Color::white) { drawText(pos.x, pos.y, text, color); }
+inline void setCursor(Image cursor, glm::vec2 pos) { setCursor(cursor, pos.x, pos.y); }
 inline glm::vec2 textSize(std::string text) { return glm::vec2(textWidth(text), textHeight(text)); }
 inline glm::vec2 getViewportSize() { return glm::vec2(getViewportWidth(), getViewportHeight()); }
 inline glm::vec2 getMousePos() { return glm::vec2(getMouseX(), getMouseY()); }
@@ -162,6 +177,7 @@ void _mouseScrollCallback(float deltaX, float deltaY);
 void _keyCallback(Key key, char ch, bool state, bool repeat);
 }  // namespace Mova
 
+using MvCursor = Mova::Cursor;
 using MvWindow = Mova::Window;
 using MvImage = Mova::Image;
 using MvFont = Mova::Font;
