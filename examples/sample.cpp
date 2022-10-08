@@ -15,7 +15,7 @@ int main() {                                  // There is full glm::vec2 support
     /*
     enum class MvCursor {
       Default, None,
-      ContextMenu, Help, Pointer,
+      ContextMenu, Help, Hand,
       Progress, Wait,
       Crosshair, Text, Alias,
       Move, NotAllowed,

@@ -70,7 +70,7 @@ enum Flip : uint8_t {
 // clang-format off
 enum class Cursor {
   Default, None,
-  ContextMenu, Help, Pointer,
+  ContextMenu, Help, Hand,
   Progress, Wait,
   Crosshair, Text, Alias,
   Move, NotAllowed,

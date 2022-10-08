@@ -311,7 +311,7 @@ std::map<std::string, Key> keyMap = {
 
 std::map<Cursor, std::string> cursorMap = {
   {Cursor::Default, "default"}, {Cursor::None, "none"},
-  {Cursor::ContextMenu, "context-menu"}, {Cursor::Help, "help"}, {Cursor::Pointer, "pointer"},
+  {Cursor::ContextMenu, "context-menu"}, {Cursor::Help, "help"}, {Cursor::Hand, "pointer"},
   {Cursor::Progress, "progress"}, {Cursor::Wait, "wait"},
   {Cursor::Crosshair, "crosshair"}, {Cursor::Text, "text"}, {Cursor::Alias, "alias"},
   {Cursor::Move, "move"}, {Cursor::NotAllowed, "not-allowed"},
