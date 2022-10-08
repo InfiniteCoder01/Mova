@@ -48,7 +48,8 @@ int main() {                                  // There is full glm::vec2 support
     //               ^                   ^                       ^           ^
     //             From                 To                     Color      Thickness (Optional, 3 pixels by default)
     Mova::fillRect(x1, y1, 100, 100, Mova::isMouseButtonHeld(MOUSE_LEFT) ? Color::red : Color::green);  // There is also isMouseButtonPressed and isMouseButtonReleased
-    Mova::drawRect(100, 100, 100, 100, Color::blue);
+    Mova::drawRect(100, 100, 100, 100, Color::blue, 3);
+    //                                              ^Thickness (Optional, 3 pixels by default)
 
     printf("(%d, %d), (%f, %f)\n", Mova::getMouseDeltaX(), Mova::getMouseDeltaY(), Mova::getScrollX(), Mova::getScrollY());
 
