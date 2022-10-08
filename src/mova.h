@@ -28,9 +28,11 @@ struct Image {
 
   Texture asTexture(bool mutible = false, bool tiling = false);
   void setPixel(int x, int y, Color color);
+  Color getPixel(int x, int y);
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
   void setPixel(glm::vec2 pos, Color color) { setPixel(pos.x, pos.y, color); }
+  Color getPixel(glm::vec2 pos) { return getPixel(pos.x, pos.y); }
   glm::vec2 size() { return glm::vec2(width, height); }
 #endif
 

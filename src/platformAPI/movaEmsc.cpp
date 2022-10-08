@@ -191,12 +191,15 @@ Texture Image::asTexture(bool mutible, bool tiling) {
 }
 
 void Image::setPixel(int x, int y, Color color) {
-  data->content[(x + y * width) * 4] = color.r;
-  data->content[(x + y * width) * 4 + 1] = color.g;
-  data->content[(x + y * width) * 4 + 2] = color.b;
-  data->content[(x + y * width) * 4 + 3] = color.a;
+  ((uint32_t*)data->content)[x + y * width] = color.value;
+  // data->content[(x + y * width) * 4] = color.r;
+  // data->content[(x + y * width) * 4 + 1] = color.g;
+  // data->content[(x + y * width) * 4 + 2] = color.b;
+  // data->content[(x + y * width) * 4 + 3] = color.a;
   data->changed = data->tchanged = true;
 }
+
+Color Image::getPixel(int x, int y) { return Color(((uint32_t*)data->content)[x + y * width]); }
 
 Audio::Audio(std::string filename) : data(new AudioData()) {
   MV_FATALERR("Audio is not supported yet!");

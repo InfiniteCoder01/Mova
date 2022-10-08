@@ -59,10 +59,10 @@ Model loadOBJ(std::string_view filepath, unsigned int uvscale) {
   return Model{.m_AttribArrays = attribArrays, .m_VertexCount = vertices.size() / 3};
 }
 
-const Color Color::black = Color(0);
-const Color Color::white = Color(255);
-const Color Color::gray = Color(150);
-const Color Color::darkgray = Color(51);
+const Color Color::black = Color(0, 0, 0);
+const Color Color::white = Color(255, 255, 255);
+const Color Color::gray = Color(150, 150, 150);
+const Color Color::darkgray = Color(51, 51, 51);
 const Color Color::alpha = Color(0, 0, 0, 0);
 const Color Color::red = Color(255, 0, 0);
 const Color Color::green = Color(0, 255, 0);
