@@ -33,9 +33,31 @@ void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
   else MV_ERR("Line drawing is not supported with this context type yet!");
 }
 
+void drawRect(int x, int y, int w, int h, Color color, int thickness) {
+  if (contextType == ContextType::DEFAULT) _drawRect(x, y, w, h, color, thickness);
+  else if (contextType == ContextType::RENDERER) {
+    renderer->setThickness(thickness);
+    renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), color, RenderType::LINE_STRIP);
+  } else MV_ERR("Rectangle filling is not supported with this context type yet!");
+}
+
 void fillRect(int x, int y, int w, int h, Color color) {
   if (contextType == ContextType::DEFAULT) _fillRect(x, y, w, h, color);
   else if (contextType == ContextType::RENDERER) renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), color);
+  else MV_ERR("Rectangle filling is not supported with this context type yet!");
+}
+
+void roundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
+  if (r2 == -1) r2 = r3 = r4 = r1;
+  else if (r3 == -1) r4 = r1, r3 = r2;
+  if (contextType == ContextType::DEFAULT) _roundRect(x, y, w, h, color, r1, r2, r3, r4);
+  else MV_ERR("Rectangle filling is not supported with this context type yet!");
+}
+
+void fillRoundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
+  if (r2 == -1) r2 = r3 = r4 = r1;
+  else if (r3 == -1) r4 = r1, r3 = r2;
+  if (contextType == ContextType::DEFAULT) _fillRoundRect(x, y, w, h, color, r1, r2, r3, r4);
   else MV_ERR("Rectangle filling is not supported with this context type yet!");
 }
 
@@ -48,8 +70,8 @@ void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, in
   else if (contextType == ContextType::RENDERER) {
     float uv1x = srcX / (float)image.width, uv1y = srcY / (float)image.height;
     float uv2x = uv1x + srcW / (float)image.width, uv2y = uv1y + srcH / (float)image.height;
-    if(flip & FLIP_HORIZONTAL) std::swap(uv1x, uv2x);
-    if(flip & FLIP_VERTICAL) std::swap(uv1y, uv2y);
+    if (flip & FLIP_HORIZONTAL) std::swap(uv1x, uv2x);
+    if (flip & FLIP_VERTICAL) std::swap(uv1y, uv2y);
     renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), image.asTexture(), 1 - uv1x, 1 - uv2y, 1 - uv2x, 1 - uv1y);
   } else MV_ERR("Image drawing is not supported with this context type yet!");
 }
@@ -143,7 +165,7 @@ void _mouseScrollCallback(float deltaX, float deltaY) {
 
 void _keyCallback(Key key, char ch, bool state, bool repeat) {
   if (state) g_CharPressed = ch;
-  if (!repeat) g_KeyStates[key] = state ? KS_PRESSED | KS_HELD : KS_RELEASED;
+  if (!repeat) g_KeyStates[key] = state ? KS_PRESSED | KS_HELD | KS_REPEATED : KS_RELEASED;
   else if (state) g_KeyStates[key] |= KS_REPEATED;
 
   if (g_UserKeyCallback) g_UserKeyCallback(key, ch, state, repeat);

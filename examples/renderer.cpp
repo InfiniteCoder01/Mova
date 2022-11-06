@@ -49,7 +49,7 @@ int main() {
     */
     // Vertex attributes, you can pass uv's seacond
     //                   V
-    renderer->draw({&triVertices}, 3, red); // Warn: reset's texture
+    renderer->draw({triVertices}, 3, Color::red); // Warn: reset's texture
     // renderer->draw({&triVertices}, 3); // Assumes, that texture is already bound via renderer->setTexture
     // renderer->draw({&triVertices}, 3, texture, tint /*tint is optional, white by default*/);
     Mova::nextFrame();

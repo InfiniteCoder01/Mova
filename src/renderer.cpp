@@ -59,11 +59,23 @@ Model loadOBJ(std::string_view filepath, unsigned int uvscale) {
   return Model{.m_AttribArrays = attribArrays, .m_VertexCount = vertices.size() / 3};
 }
 
-const Color Color::black = Color(0, 0, 0);
-const Color Color::white = Color(255, 255, 255);
-const Color Color::gray = Color(150, 150, 150);
-const Color Color::darkgray = Color(51, 51, 51);
-const Color Color::alpha = Color(0, 0, 0, 0);
-const Color Color::red = Color(255, 0, 0);
-const Color Color::green = Color(0, 255, 0);
-const Color Color::blue = Color(0, 0, 255);
+Color Color::hsv(uint16_t h, uint8_t s, uint8_t v) {
+  uint8_t m = v * 255 * (100 - s) / 10000;
+  uint8_t x = s * v * (60 - abs(h % 120 - 60)) * 255 / 10000 / 60 + m;
+  uint8_t y = s * v * 255 / 10000 + m;
+  if (h >= 0 && h < 60) return Color(y, x, m);
+  else if (h >= 60 && h < 120) return Color(x, y, m);
+  else if (h >= 120 && h < 180) return Color(m, y, x);
+  else if (h >= 180 && h < 240) return Color(m, x, y);
+  else if (h >= 240 && h < 300) return Color(x, m, y);
+  else return Color(y, m, x);
+}
+
+constexpr Color Color::black = Color(0, 0, 0);
+constexpr Color Color::white = Color(255, 255, 255);
+constexpr Color Color::gray = Color(150, 150, 150);
+constexpr Color Color::darkgray = Color(51, 51, 51);
+constexpr Color Color::alpha = Color(0, 0, 0, 0);
+constexpr Color Color::red = Color(255, 0, 0);
+constexpr Color Color::green = Color(0, 255, 0);
+constexpr Color Color::blue = Color(0, 0, 255);

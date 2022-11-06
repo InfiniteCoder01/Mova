@@ -12,9 +12,9 @@
 #endif
 
 struct Color {
-  Color() = default;
-  Color(uint32_t value) : value(value) {}
-  Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
+  constexpr Color() : value(0) {}
+  constexpr Color(uint32_t value) : value(value) {}
+  constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
 
   union {
     struct {
@@ -22,6 +22,10 @@ struct Color {
     };
     uint32_t value;
   };
+
+  bool operator==(const Color& other) { return value == other.value; }
+
+  static Color hsv(uint16_t h, uint8_t s, uint8_t v);
 
   static const Color black, white, gray, darkgray, alpha;
   static const Color red, green, blue;
@@ -40,7 +44,7 @@ typedef std::shared_ptr<_VertexAttribArray> VertexAttribArray;
 typedef std::shared_ptr<unsigned int> Texture;
 typedef std::shared_ptr<unsigned int> Shader;
 
-enum class RenderType { TRIANGLES, LINES };
+enum class RenderType { TRIANGLE_FAN, TRIANGLES, LINE_STRIP, LINES };
 
 class Renderer {
  public:
@@ -67,21 +71,21 @@ class Renderer {
   virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, Color color, RenderType type = RenderType::TRIANGLES) = 0;
   virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, const Texture& texture, Color tint = Color::white, RenderType type = RenderType::TRIANGLES) = 0;
 
-  virtual void drawRect(float x, float y, float w, float h, Color color) {
-    VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
-    draw({verts}, 6, color);
+  virtual void drawRect(float x, float y, float w, float h, Color color, RenderType type = RenderType::TRIANGLE_FAN) {
+    VertexAttribArray verts = createVertexAttribArray({x, y, 0, x + w, y, 0, x + w, y + h, 0, x, y + h, 0, x, y, 0});
+    draw({verts}, 5, color, type);
   }
 
-  virtual void drawRect(float x, float y, float w, float h, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1) {
-    VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
-    VertexAttribArray uvs = createVertexAttribArray({u1, v1, u1, v2, u2, v2, u1, v1, u2, v1, u2, v2}, 2);
-    draw({verts, uvs}, 6);
+  virtual void drawRect(float x, float y, float w, float h, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1, RenderType type = RenderType::TRIANGLE_FAN) {
+    VertexAttribArray verts = createVertexAttribArray({x, y, 0, x + w, y, 0, x + w, y + h, 0, x, y + h, 0, x, y, 0});
+    VertexAttribArray uvs = createVertexAttribArray({u1, v1, u2, v1, u2, v2, u1, v2, u1, v1}, 2);
+    draw({verts, uvs}, 5, type);
   }
 
-  virtual void drawRect(float x, float y, float w, float h, const Texture& texture, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1, Color tint = Color::white) {
-    VertexAttribArray verts = createVertexAttribArray({x, y, 0, x, y + h, 0, x + w, y + h, 0, x, y, 0, x + w, y, 0, x + w, y + h, 0});
-    VertexAttribArray uvs = createVertexAttribArray({u1, v1, u1, v2, u2, v2, u1, v1, u2, v1, u2, v2}, 2);
-    draw({verts, uvs}, 6, texture, tint);
+  virtual void drawRect(float x, float y, float w, float h, const Texture& texture, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1, Color tint = Color::white, RenderType type = RenderType::TRIANGLE_FAN) {
+    VertexAttribArray verts = createVertexAttribArray({x, y, 0, x + w, y, 0, x + w, y + h, 0, x, y + h, 0, x, y, 0});
+    VertexAttribArray uvs = createVertexAttribArray({u1, v1, u2, v1, u2, v2, u1, v2, u1, v1}, 2);
+    draw({verts, uvs}, 5, texture, tint, type);
   }
 
   virtual void drawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 3) {

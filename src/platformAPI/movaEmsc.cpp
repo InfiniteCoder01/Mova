@@ -64,9 +64,28 @@ void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
   context->context.call<void>("stroke");
 }
 
+void _drawRect(int x, int y, int w, int h, Color color, int thickness) {
+  context->context.set("strokeStyle", color2str(color));
+  context->context.call<void>("strokeRect", x, y, w, h);
+}
+
 void _fillRect(int x, int y, int w, int h, Color color) {
   context->context.set("fillStyle", color2str(color));
   context->context.call<void>("fillRect", x, y, w, h);
+}
+
+void _roundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4) {
+  context->context.set("strokeStyle", color2str(color));
+  context->context.call<void>("beginPath");
+  context->context.call<void>("roundRect", x, y, w, h, val::array(std::vector{r1, r2, r3, r4}));
+  context->context.call<void>("stroke");
+}
+
+void _fillRoundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4) {
+  context->context.set("fillStyle", color2str(color));
+  context->context.call<void>("beginPath");
+  context->context.call<void>("roundRect", x, y, w, h, val::array(std::vector{r1, r2, r3, r4}));
+  context->context.call<void>("fill");
 }
 
 void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
@@ -86,7 +105,7 @@ void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, i
 
 void _drawText(int x, int y, std::string text, Color color) {
   context->context.set("fillStyle", color2str(color));
-  context->context.call<void>("fillText", text, x, y + textHeight(text));
+  context->context.call<void>("fillText", text, x, y);
 }
 
 void _setFont(Font font, int size) { context->context.set("font", std::to_string(size) + "px " + font.data->fontFamily); }
@@ -114,6 +133,28 @@ void _nextFrame() {
 
 int getMouseX() { return context->mouseX; }
 int getMouseY() { return context->mouseY; }
+
+void copyToClipboard(std::string_view s) { val::global("navigator")["clipboard"].call<void>("writeText", val(s.data())); }
+void copyToClipboard(Image& image) {
+  // val::global("navigator")["clipboard"].call<void>("write", val(s.data()));
+}
+
+EM_ASYNC_JS(char*, _mova_readClipboardText, (), {
+  var text = await navigator.clipboard.readText();
+  var lengthBytes = lengthBytesUTF8(text) + 1;
+  var stringOnWasmHeap = _malloc(lengthBytes);
+  stringToUTF8(text, stringOnWasmHeap, lengthBytes);
+  return stringOnWasmHeap;
+});
+
+std::string getClipboardContent() {
+  char* text = _mova_readClipboardText();
+  std::string str = std::string(text);
+  free(text);
+  return str;
+}
+
+void sleep(uint32_t ms) { emscripten_sleep(ms); }
 
 /* --------------- Structs --------------- */
 Window::Window(std::string_view title, RendererConstructor createRenderer) : data(new WindowData()) {
@@ -201,6 +242,14 @@ void Image::setPixel(int x, int y, Color color) {
 
 Color Image::getPixel(int x, int y) { return Color(((uint32_t*)data->content)[x + y * width]); }
 
+Image Image::clone() {
+  char* content = (char*)malloc(width * height * 4);
+  memcpy(content, data->content, width * height * 4);
+  Image img = Image(width, height, content, data->antialiasing);
+  img.data->immContent = false;
+  return img;
+}
+
 Audio::Audio(std::string filename) : data(new AudioData()) {
   MV_FATALERR("Audio is not supported yet!");
   // clang-format off
@@ -231,11 +280,8 @@ AudioData::~AudioData() = default;
 Font::Font(std::string filename) : data(new FontData()) {
   // clang-format off
   EM_ASM({
-    Asyncify.handleAsync(async () => {
-      var font = new FontFace(UTF8ToString($0).replace(' ', '-').replace('/', '-').replace('.', '-'), FS.readFile(UTF8ToString($0)).buffer);
-      await font.load();
-      document.fonts.add(font);
-    });
+    var font = new FontFace(UTF8ToString($0).replaceAll(' ', '-').replaceAll('/', '-').replaceAll('.', '-'), FS.readFile(UTF8ToString($0)).buffer);
+    font.load().then(f => document.fonts.add(f));
   }, filename.c_str());
   // clang-format on
   std::replace(filename.begin(), filename.end(), ' ', '-');
@@ -259,6 +305,7 @@ static void loadImage(Image* img) {
   getTempCanvas().call<val>("getContext", val("2d")).call<void>("putImageData", imageData, 0, 0);
   img->data->JSimage = val::global("Image").new_();
   img->data->dataURL = getTempCanvas().call<val>("toDataURL");
+  // img->data->dataURL = getTempCanvas().call<val>("toBlob", val("blob => console.log(blob);"), val("image/png"));
   img->data->JSimage.set("src", img->data->dataURL);
 }
 
