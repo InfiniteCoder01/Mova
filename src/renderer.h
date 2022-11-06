@@ -12,9 +12,9 @@
 #endif
 
 struct Color {
-  Color() = default;
-  Color(uint32_t value) : value(value) {}
-  Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
+  constexpr Color() : value(0) {}
+  constexpr Color(uint32_t value) : value(value) {}
+  constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
 
   union {
     struct {
@@ -22,6 +22,10 @@ struct Color {
     };
     uint32_t value;
   };
+
+  bool operator==(const Color& other) { return value == other.value; }
+
+  static Color hsv(uint16_t h, uint8_t s, uint8_t v);
 
   static const Color black, white, gray, darkgray, alpha;
   static const Color red, green, blue;

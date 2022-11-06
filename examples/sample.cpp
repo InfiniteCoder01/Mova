@@ -4,7 +4,7 @@ int main() {                                  // There is full glm::vec2 support
   MvWindow window = MvWindow("Mova sample");  // Use Mova::setContext to switch between windows: Mova::setContext(window);
   //                  Antialiasing, optional and true by default
   //                                    V
-  MvImage image = MvImage("test.png", false);  // MvImage(width, height, data (const char*, RGBA8 and nullptr by default (creates black image)), atialiasing = false)
+  MvImage image = MvImage("test.png", false);  // MvImage(width, height, data (const char*, RGBA8 and nullptr by default (creates black image)), atialiasing = true)
   // MvFont font = MvFont("filename.ttf");
   // Mova::setFont(font, 64);
   //                      ^ size

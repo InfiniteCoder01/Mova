@@ -9,4 +9,5 @@ int keyboardY();
 #if __has_include("glm.hpp") || __has_include("glm/glm.hpp")
 glm::vec2 keyboardJoy();
 #endif
+void FPSCounter();
 }  // namespace MGame

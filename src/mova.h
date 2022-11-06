@@ -23,12 +23,13 @@ struct Window {
 
 struct Image {
   Image() = default;
-  Image(std::string_view filename, bool antialiasing = false);
+  Image(std::string_view filename, bool antialiasing = true);
   Image(int width, int height, const char* content = nullptr, bool antialiasing = false);
 
   Texture asTexture(bool mutible = false, bool tiling = false);
   void setPixel(int x, int y, Color color);
   Color getPixel(int x, int y);
+  Image clone();
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
   void setPixel(glm::vec2 pos, Color color) { setPixel(pos.x, pos.y, color); }
@@ -104,6 +105,8 @@ void clear(Color color = Color::black);
 void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness = 3);
 void drawRect(int x, int y, int w, int h, Color color, int thickness = 3);
 void fillRect(int x, int y, int w, int h, Color color);
+void roundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
+void fillRoundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
 void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
 void drawText(int x, int y, std::string text, Color color = Color::white);
@@ -142,6 +145,12 @@ void setCursor(Cursor cursor);
 void setCursor(Image cursor, int x = 0, int y = 0);
 void pointerLock(bool state);
 
+void copyToClipboard(std::string_view s);
+void copyToClipboard(Image& image);
+std::string getClipboardContent();
+
+void sleep(uint32_t ms);
+
 using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
 using ScrollCallback = void (*)(float deltaX, float deltaY);
 using KeyCallback = void (*)(Key key, char character, bool state, bool repeat);
@@ -154,6 +163,8 @@ void setKeyCallback(KeyCallback callback);
 inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
 inline void drawRect(glm::vec2 pos, glm::vec2 size, Color color, int thickness = 3) { drawRect(pos.x, pos.y, size.x, size.y, color, thickness); }
 inline void fillRect(glm::vec2 pos, glm::vec2 size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
+inline void roundRect(glm::vec2 pos, glm::vec2 size, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1) { roundRect(pos.x, pos.y, size.x, size.y, color, r1, r2, r3, r4); }
+inline void fillRoundRect(glm::vec2 pos, glm::vec2 size, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1) { fillRoundRect(pos.x, pos.y, size.x, size.y, color, r1, r2, r3, r4); }
 inline void drawImage(Image& image, glm::vec2 pos, glm::vec2 size = glm::vec2(-1), Flip flip = FLIP_NONE, glm::vec2 srcPos = glm::vec2(0), glm::vec2 srcSize = glm::vec2(-1)) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
 inline void drawText(glm::vec2 pos, std::string text, Color color = Color::white) { drawText(pos.x, pos.y, text, color); }
 inline void setCursor(Image cursor, glm::vec2 pos) { setCursor(cursor, pos.x, pos.y); }
@@ -168,6 +179,8 @@ void _clear(Color color);
 void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness);
 void _drawRect(int x, int y, int w, int h, Color color, int thickness);
 void _fillRect(int x, int y, int w, int h, Color color);
+void _roundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4);
+void _fillRoundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4);
 void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH);
 void _drawText(int x, int y, std::string text, Color color);
 void _setFont(Font font, int size);

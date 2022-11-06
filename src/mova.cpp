@@ -47,6 +47,20 @@ void fillRect(int x, int y, int w, int h, Color color) {
   else MV_ERR("Rectangle filling is not supported with this context type yet!");
 }
 
+void roundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
+  if (r2 == -1) r2 = r3 = r4 = r1;
+  else if (r3 == -1) r4 = r1, r3 = r2;
+  if (contextType == ContextType::DEFAULT) _roundRect(x, y, w, h, color, r1, r2, r3, r4);
+  else MV_ERR("Rectangle filling is not supported with this context type yet!");
+}
+
+void fillRoundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
+  if (r2 == -1) r2 = r3 = r4 = r1;
+  else if (r3 == -1) r4 = r1, r3 = r2;
+  if (contextType == ContextType::DEFAULT) _fillRoundRect(x, y, w, h, color, r1, r2, r3, r4);
+  else MV_ERR("Rectangle filling is not supported with this context type yet!");
+}
+
 void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
   if (w == -1) w = image.width;
   if (h == -1) h = image.height;
@@ -151,7 +165,7 @@ void _mouseScrollCallback(float deltaX, float deltaY) {
 
 void _keyCallback(Key key, char ch, bool state, bool repeat) {
   if (state) g_CharPressed = ch;
-  if (!repeat) g_KeyStates[key] = state ? KS_PRESSED | KS_HELD : KS_RELEASED;
+  if (!repeat) g_KeyStates[key] = state ? KS_PRESSED | KS_HELD | KS_REPEATED : KS_RELEASED;
   else if (state) g_KeyStates[key] |= KS_REPEATED;
 
   if (g_UserKeyCallback) g_UserKeyCallback(key, ch, state, repeat);

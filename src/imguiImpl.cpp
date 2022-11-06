@@ -1,5 +1,6 @@
 #if __has_include("imgui.h")
 #include "imguiImpl.h"
+#include <backends/imgui_impl_opengl3.h>
 #include <map>
 
 // clang-format off
@@ -77,19 +78,20 @@ void ImGui_ImplMova_Init() {
   });
 
   ImGui_ImplOpenGL3_Init();
-  // int* bd = IM_NEW(int)();
-  // io.BackendPlatformUserData = (void*)bd;
-  // io.BackendPlatformName = "imgui_impl_gui";
+  int* bd = IM_NEW(int)();
+  io.BackendPlatformUserData = (void*)bd;
+  io.BackendPlatformName = "imgui_impl_gui";
 
-  // ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-  // main_viewport->PlatformHandle = (void*)bd->Window;
+  ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+  main_viewport->PlatformHandle = (void*)bd;
 }
 
 void ImGui_ImplMova_NewFrame() {
+  ImGui_ImplOpenGL3_NewFrame();
   ImGuiIO& io = ImGui::GetIO();
   io.DisplaySize = ImVec2(Mova::getViewportWidth(), Mova::getViewportHeight());
+  io.DisplayFramebufferScale = ImVec2(1, 1);
   io.DeltaTime = Mova::deltaTime();
-  ImGui_ImplOpenGL3_NewFrame();
   ImGui::NewFrame();
 }
 
