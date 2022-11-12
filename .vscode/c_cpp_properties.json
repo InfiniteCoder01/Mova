@@ -4,24 +4,16 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "D:/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/",
-                "D:/emsdk/upstream/emscripten/cache/sysroot/include",
-                "D:/Dev/C++/LIB/imgui",
-                "D:/Dev/C++/LIB/Mova/src",
-                "D:/Dev/C++/LIB/glm/"
+                "${workspaceFolder}/src",
+                "D:/Dev/C++/LIB/imgui"
             ],
             "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE",
-                "__EMSCRIPTEN__"
+                "_DEBUG"
             ],
-            "windowsSdkVersion": "10.0.19041.0",
-            "compilerPath": "D:/emsdk/upstream/emscripten/em++.bat",
-            "cStandard": "c17",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-clang-x64",
-            "configurationProvider": "ms-vscode.makefile-tools"
+            "compilerPath": "C:\\Users\\InfiniteCoder\\gcc\\bin\\gcc.exe",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64"
         }
     ],
     "version": 4

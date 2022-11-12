@@ -3,7 +3,7 @@
 
 Renderer* renderer = nullptr;
 
-Model loadOBJ(std::string_view filepath, unsigned int uvscale) {
+MVAPI Model loadOBJ(std::string_view filepath, unsigned int uvscale) {
   std::vector<float> tvertices, tnormals, tuvs;
   std::vector<float> vertices, normals, uvs;
   FILE* file = fopen(filepath.data(), "rb");

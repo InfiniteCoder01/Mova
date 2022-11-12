@@ -1,4 +1,5 @@
 #include "mova.h"
+#include "movaPrivate.h"
 #include <map>
 #include <chrono>
 
@@ -14,26 +15,27 @@ static MouseCallback g_UserMouseCallback;
 static KeyCallback g_UserKeyCallback;
 
 enum KeyState : uint8_t { KS_HELD = 0b0001, KS_PRESSED = 0b0010, KS_RELEASED = 0b0100, KS_REPEATED = 0b1000 };
+std::vector<std::string> dragNDropFiles;
 ContextType contextType;
 
-float rendX(int x) { return x * 2.f / getViewportWidth() - 1.f; }
-float rendY(int y) { return y * -2.f / getViewportHeight() + 1.f; }
-float rendW(int w) { return w * 2.f / getViewportWidth(); }
-float rendH(int h) { return h * 2.f / getViewportHeight(); }
+static float rendX(int x) { return x * 2.f / getViewportWidth() - 1.f; }
+static float rendY(int y) { return y * -2.f / getViewportHeight() + 1.f; }
+static float rendW(int w) { return w * 2.f / getViewportWidth(); }
+static float rendH(int h) { return h * 2.f / getViewportHeight(); }
 
-void clear(Color color) {
+MVAPI void clear(Color color) {
   if (contextType == ContextType::DEFAULT) _clear(color);
   else if (contextType == ContextType::RENDERER) renderer->clear(color);
   else MV_ERR("Clearing is not supported with this context type yet!");
 }
 
-void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
+MVAPI void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness) {
   if (contextType == ContextType::DEFAULT) _drawLine(x1, y1, x2, y2, color, thickness);
   else if (contextType == ContextType::RENDERER) renderer->drawLine(rendX(x1), rendY(y1), rendX(x2), rendY(y2), color, thickness);
   else MV_ERR("Line drawing is not supported with this context type yet!");
 }
 
-void drawRect(int x, int y, int w, int h, Color color, int thickness) {
+MVAPI void drawRect(int x, int y, int w, int h, Color color, int thickness) {
   if (contextType == ContextType::DEFAULT) _drawRect(x, y, w, h, color, thickness);
   else if (contextType == ContextType::RENDERER) {
     renderer->setThickness(thickness);
@@ -41,27 +43,27 @@ void drawRect(int x, int y, int w, int h, Color color, int thickness) {
   } else MV_ERR("Rectangle filling is not supported with this context type yet!");
 }
 
-void fillRect(int x, int y, int w, int h, Color color) {
+MVAPI void fillRect(int x, int y, int w, int h, Color color) {
   if (contextType == ContextType::DEFAULT) _fillRect(x, y, w, h, color);
   else if (contextType == ContextType::RENDERER) renderer->drawRect(rendX(x), rendY(y) - rendH(h), rendW(w), rendH(h), color);
   else MV_ERR("Rectangle filling is not supported with this context type yet!");
 }
 
-void roundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
+MVAPI void roundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
   if (r2 == -1) r2 = r3 = r4 = r1;
   else if (r3 == -1) r4 = r1, r3 = r2;
   if (contextType == ContextType::DEFAULT) _roundRect(x, y, w, h, color, r1, r2, r3, r4);
   else MV_ERR("Rectangle filling is not supported with this context type yet!");
 }
 
-void fillRoundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
+MVAPI void fillRoundRect(int x, int y, int w, int h, Color color, int r1, int r2, int r3, int r4) {
   if (r2 == -1) r2 = r3 = r4 = r1;
   else if (r3 == -1) r4 = r1, r3 = r2;
   if (contextType == ContextType::DEFAULT) _fillRoundRect(x, y, w, h, color, r1, r2, r3, r4);
   else MV_ERR("Rectangle filling is not supported with this context type yet!");
 }
 
-void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
+MVAPI void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
   if (w == -1) w = image.width;
   if (h == -1) h = image.height;
   if (srcW == -1) srcW = image.width;
@@ -76,39 +78,39 @@ void drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, in
   } else MV_ERR("Image drawing is not supported with this context type yet!");
 }
 
-void drawText(int x, int y, std::string text, Color color) {
+MVAPI void drawText(int x, int y, std::string text, Color color) {
   if (contextType == ContextType::DEFAULT) _drawText(x, y, text, color);
   else MV_ERR("Text is not supported with this context type yet!");
 }
 
-void setFont(Font font, int size) {
+MVAPI void setFont(Font font, int size) {
   if (contextType == ContextType::DEFAULT) _setFont(font, size);
   else MV_ERR("Text is supported with this context type yet!");
 }
 
-uint32_t textWidth(std::string text) {
+MVAPI uint32_t textWidth(std::string text) {
   if (contextType == ContextType::DEFAULT) return _textWidth(text);
   else MV_ERR("Text is supported with this context type yet!");
   return 0;
 }
 
-uint32_t textHeight(std::string text) {
+MVAPI uint32_t textHeight(std::string text) {
   if (contextType == ContextType::DEFAULT) return _textHeight(text);
   else MV_ERR("Text is supported with this context type yet!");
   return 0;
 }
 
-uint32_t getViewportWidth() {
+MVAPI uint32_t getViewportWidth() {
   if (contextType == ContextType::RENDERER && renderer->getTargetWidth()) return renderer->getTargetWidth();
   return _getViewportWidth();
 }
 
-uint32_t getViewportHeight() {
+MVAPI uint32_t getViewportHeight() {
   if (contextType == ContextType::RENDERER && renderer->getTargetHeight()) return renderer->getTargetHeight();
   return _getViewportHeight();
 }
 
-void nextFrame() {
+MVAPI void nextFrame() {
   static auto t = std::chrono::steady_clock::now();
   g_DeltaTime = (std::chrono::steady_clock::now() - t).count() / 1000000000.0;
   t = std::chrono::steady_clock::now();
@@ -122,27 +124,27 @@ void nextFrame() {
   _nextFrame();
 }
 
-float deltaTime() { return g_DeltaTime > 0 ? g_DeltaTime : 1.f / 60.f; }
+MVAPI float deltaTime() { return g_DeltaTime > 0 ? g_DeltaTime : 1.f / 60.f; }
 
-char getCharPressed() { return g_CharPressed; }
-bool isKeyHeld(Key key) { return (g_KeyStates[key] & KS_HELD) != 0; }
-bool isKeyPressed(Key key) { return (g_KeyStates[key] & KS_PRESSED) != 0; }
-bool isKeyReleased(Key key) { return (g_KeyStates[key] & KS_RELEASED) != 0; }
-bool isKeyRepeated(Key key) { return (g_KeyStates[key] & KS_REPEATED) != 0; }
+MVAPI char getCharPressed() { return g_CharPressed; }
+MVAPI bool isKeyHeld(Key key) { return (g_KeyStates[key] & KS_HELD) != 0; }
+MVAPI bool isKeyPressed(Key key) { return (g_KeyStates[key] & KS_PRESSED) != 0; }
+MVAPI bool isKeyReleased(Key key) { return (g_KeyStates[key] & KS_RELEASED) != 0; }
+MVAPI bool isKeyRepeated(Key key) { return (g_KeyStates[key] & KS_REPEATED) != 0; }
 
-bool isMouseButtonHeld(MouseButton button) { return (g_MouseHeld & button) != 0; }
-bool isMouseButtonPressed(MouseButton button) { return (g_MousePressed & button) != 0; }
-bool isMouseButtonReleased(MouseButton button) { return (g_MouseReleased & button) != 0; }
+MVAPI bool isMouseButtonHeld(MouseButton button) { return (g_MouseHeld & button) != 0; }
+MVAPI bool isMouseButtonPressed(MouseButton button) { return (g_MousePressed & button) != 0; }
+MVAPI bool isMouseButtonReleased(MouseButton button) { return (g_MouseReleased & button) != 0; }
 
-int getMouseDeltaX() { return g_MouseDeltaX; }
-int getMouseDeltaY() { return g_MouseDeltaY; }
+MVAPI int getMouseDeltaX() { return g_MouseDeltaX; }
+MVAPI int getMouseDeltaY() { return g_MouseDeltaY; }
 
-float getScrollX() { return g_ScrollX; }
-float getScrollY() { return g_ScrollY; }
+MVAPI float getScrollX() { return g_ScrollX; }
+MVAPI float getScrollY() { return g_ScrollY; }
 
-void setScrollCallback(ScrollCallback callback) { g_UserScrollCallback = callback; }
-void setMouseCallback(MouseCallback callback) { g_UserMouseCallback = callback; }
-void setKeyCallback(KeyCallback callback) { g_UserKeyCallback = callback; }
+MVAPI void setScrollCallback(ScrollCallback callback) { g_UserScrollCallback = callback; }
+MVAPI void setMouseCallback(MouseCallback callback) { g_UserMouseCallback = callback; }
+MVAPI void setKeyCallback(KeyCallback callback) { g_UserKeyCallback = callback; }
 
 /*                    CALLBACKS                    */
 void _mouseCallback(Window* window, int mouseX, int mouseY, int deltaX, int deltaY, uint8_t buttons) {

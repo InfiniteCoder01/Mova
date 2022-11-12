@@ -1,0 +1,19 @@
+platform "Windows" {
+    command: "g++ $files -o $out -I*$include";
+    submoduleCommand: "*g++ -c $files -o $out -I*$include";
+}
+
+module "Mova" {
+    path: "src";
+    files: "src/*.cpp";
+    include: "src";
+}
+
+module "Main" {
+    // files: "examples/sample.cpp";
+    files: "examples/renderer.cpp";
+    output: "test.exe";
+
+    submodule: "Mova";
+    flags: "-O3 -lgdi32 -lopengl32";
+}

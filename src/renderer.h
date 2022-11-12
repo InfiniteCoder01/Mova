@@ -10,6 +10,8 @@
 #include <glm.hpp>
 #include <gtc/type_ptr.hpp>
 #endif
+#include "platform.h"
+#include "lib/OreonMath.hpp"
 
 struct Color {
   constexpr Color() : value(0) {}
@@ -41,6 +43,7 @@ struct _VertexAttribArray {
 };
 
 typedef std::shared_ptr<_VertexAttribArray> VertexAttribArray;
+typedef std::shared_ptr<unsigned int> VertexArrayObject;
 typedef std::shared_ptr<unsigned int> Texture;
 typedef std::shared_ptr<unsigned int> Shader;
 
@@ -48,8 +51,12 @@ enum class RenderType { TRIANGLE_FAN, TRIANGLES, LINE_STRIP, LINES };
 
 class Renderer {
  public:
+  virtual void nextFrame() = 0;
+  virtual std::string getVersion() = 0;
+
   virtual VertexAttribArray createVertexAttribArray(const std::vector<float>& array, unsigned int elementSize = 3, bool mutible = false) = 0;
-  virtual Texture createTexture(const uint32_t width, const uint32_t height, const char* data = nullptr, bool antialiasing = false, bool mutible = false, bool tiling = false) = 0;
+  virtual VertexArrayObject createVertexArrayObject(const std::vector<VertexAttribArray>& arrays) = 0;
+  virtual Texture createTexture(const uint32_t width, const uint32_t height, const char* data = nullptr, bool antialiasing = true, bool mutible = false, bool tiling = false) = 0;
   virtual void modifyTexture(Texture& texture, const uint32_t width, const uint32_t height, const char* data = nullptr, bool antialiasing = false, bool mutible = false, bool tiling = false) = 0;
   virtual Shader createShader(const std::string_view& vert, const std::string_view& frag) = 0;
   virtual void defaultShader() = 0;
@@ -67,31 +74,31 @@ class Renderer {
   virtual void depth(bool enabled) = 0;
 
   virtual void clear(Color color = Color::black) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, RenderType type = RenderType::TRIANGLES) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, Color color, RenderType type = RenderType::TRIANGLES) = 0;
-  virtual void draw(const std::vector<const VertexAttribArray>& arrays, const unsigned int count, const Texture& texture, Color tint = Color::white, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(VertexArrayObject object, const unsigned int count, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(VertexArrayObject object, const unsigned int count, Color color, RenderType type = RenderType::TRIANGLES) = 0;
+  virtual void draw(VertexArrayObject object, const unsigned int count, const Texture& texture, Color tint = Color::white, RenderType type = RenderType::TRIANGLES) = 0;
 
   virtual void drawRect(float x, float y, float w, float h, Color color, RenderType type = RenderType::TRIANGLE_FAN) {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x + w, y, 0, x + w, y + h, 0, x, y + h, 0, x, y, 0});
-    draw({verts}, 5, color, type);
+    // draw({verts}, 5, color, type);
   }
 
   virtual void drawRect(float x, float y, float w, float h, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1, RenderType type = RenderType::TRIANGLE_FAN) {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x + w, y, 0, x + w, y + h, 0, x, y + h, 0, x, y, 0});
     VertexAttribArray uvs = createVertexAttribArray({u1, v1, u2, v1, u2, v2, u1, v2, u1, v1}, 2);
-    draw({verts, uvs}, 5, type);
+    // draw({verts, uvs}, 5, type);
   }
 
   virtual void drawRect(float x, float y, float w, float h, const Texture& texture, float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1, Color tint = Color::white, RenderType type = RenderType::TRIANGLE_FAN) {
     VertexAttribArray verts = createVertexAttribArray({x, y, 0, x + w, y, 0, x + w, y + h, 0, x, y + h, 0, x, y, 0});
     VertexAttribArray uvs = createVertexAttribArray({u1, v1, u2, v1, u2, v2, u1, v2, u1, v1}, 2);
-    draw({verts, uvs}, 5, texture, tint, type);
+    // draw({verts, uvs}, 5, texture, tint, type);
   }
 
   virtual void drawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 3) {
     VertexAttribArray verts = createVertexAttribArray({x1, y1, 0, x2, y2, 0});
     setThickness(thickness);
-    draw({verts}, 2, color, RenderType::LINES);
+    // draw({verts}, 2, color, RenderType::LINES);
   }
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
@@ -113,6 +120,23 @@ class Renderer {
   virtual void drawRect(glm::vec2 pos, glm::vec2 size, const Texture& texture, glm::vec2 uv1 = glm::vec2(0), glm::vec2 uv2 = glm::vec2(1), Color tint = Color::white) { drawRect(pos.x, pos.y, size.x, size.y, texture, uv1.x, uv1.y, uv2.x, uv2.y, tint); }
   virtual void drawLine(glm::vec2 from, glm::vec2 to, Color color, float thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
 #endif
+  virtual VertexAttribArray createVertexAttribArrayV(const std::vector<VectorMath::vec3f>& array) {
+    std::vector<float> data;
+    for (VectorMath::vec3f vert : array) {
+      data.push_back(vert.x);
+      data.push_back(vert.y);
+      data.push_back(vert.z);
+    }
+    return createVertexAttribArray(data, 3);
+  }
+
+  virtual Texture createTexture(VectorMath::vec2f size, const char* data = nullptr, bool antialiasing = false, bool tiling = false) { return createTexture(size.x, size.y, data, antialiasing, tiling); }
+  virtual void setViewport(VectorMath::vec2f pos, VectorMath::vec2f size) { setViewport(pos.x, pos.y, size.x, size.y); }
+  virtual void drawToTexture(const Texture& texture, VectorMath::vec2f size) { drawToTexture(texture, size.x, size.y); }
+  virtual void drawRect(VectorMath::vec2f pos, VectorMath::vec2f size, Color color) { drawRect(pos.x, pos.y, size.x, size.y, color); }
+  virtual void drawRect(VectorMath::vec2f pos, VectorMath::vec2f size, VectorMath::vec2f uv1 = VectorMath::vec2f(0), VectorMath::vec2f uv2 = VectorMath::vec2f(1)) { drawRect(pos.x, pos.y, size.x, size.y, uv1.x, uv1.y, uv2.x, uv2.y); }
+  virtual void drawRect(VectorMath::vec2f pos, VectorMath::vec2f size, const Texture& texture, VectorMath::vec2f uv1 = VectorMath::vec2f(0), VectorMath::vec2f uv2 = VectorMath::vec2f(1), Color tint = Color::white) { drawRect(pos.x, pos.y, size.x, size.y, texture, uv1.x, uv1.y, uv2.x, uv2.y, tint); }
+  virtual void drawLine(VectorMath::vec2f from, VectorMath::vec2f to, Color color, float thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
 
   virtual void setShaderVec2(const Shader& shader, const std::string_view& name, float x, float y) = 0;
   virtual void setShaderVec3(const Shader& shader, const std::string_view& name, float x, float y, float z) = 0;
@@ -131,7 +155,7 @@ class Renderer {
 };
 
 extern Renderer* renderer;
-Renderer* openGLRenderer();
+MVAPI Renderer* openGLRenderer();
 
 inline void setShaderVec2(const Shader& shader, const std::string_view& name, float x, float y) { renderer->setShaderVec2(shader, name, x, y); }
 inline void setShaderVec3(const Shader& shader, const std::string_view& name, float x, float y, float z) { renderer->setShaderVec3(shader, name, x, y, z); }
@@ -149,6 +173,8 @@ inline void setShaderMat2(const Shader& shader, const std::string_view& name, gl
 inline void setShaderMat3(const Shader& shader, const std::string_view& name, glm::mat3 mat) { renderer->setShaderMat3(shader, name, glm::value_ptr(mat)); }
 inline void setShaderMat4(const Shader& shader, const std::string_view& name, glm::mat4 mat) { renderer->setShaderMat4(shader, name, glm::value_ptr(mat)); }
 #endif
+inline void setShaderVec2(const Shader& shader, const std::string_view& name, VectorMath::vec2f v) { setShaderVec2(shader, name, v.x, v.y); }
+inline void setShaderVec3(const Shader& shader, const std::string_view& name, VectorMath::vec3f v) { setShaderVec3(shader, name, v.x, v.y, v.z); }
 
 inline void setShaderInt(const Shader& shader, const std::string_view& name, int value) { renderer->setShaderInt(shader, name, value); }
 inline void setShaderBool(const Shader& shader, const std::string_view& name, bool value) { renderer->setShaderBool(shader, name, value); }
@@ -172,10 +198,10 @@ struct Model {
     return *this;
   }
 
-  std::vector<const VertexAttribArray> getArrays(size_t level = 3) {
-    std::vector<const VertexAttribArray> arrays;
+  std::vector<VertexAttribArray> getArrays(size_t level = 3) {
+    std::vector<VertexAttribArray> arrays;
     arrays.reserve(m_AttribArrays.get()->size());
-    for (int i = 0; i < std::min(m_AttribArrays.get()->size(), level); i++) {
+    for (size_t i = 0; i < std::min(m_AttribArrays.get()->size(), level); i++) {
       arrays.push_back(m_AttribArrays.get()->at(i));
     }
     return arrays;
@@ -184,4 +210,4 @@ struct Model {
   int getVertexCount() { return m_VertexCount; }
 };
 
-Model loadOBJ(std::string_view filepath, unsigned int uvscale = 1);
+MVAPI Model loadOBJ(std::string_view filepath, unsigned int uvscale = 1);

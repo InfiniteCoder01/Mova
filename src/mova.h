@@ -5,18 +5,22 @@
 
 #include "renderer.h"
 #include "logassert.h"
+#include "platform.h"
+#include "lib/OreonMath.hpp"
 
 namespace Mova {
 enum class ContextType { DEFAULT, RENDERER };
+extern std::vector<std::string> dragNDropFiles;
 extern ContextType contextType;
 
-using RendererConstructor = Renderer* (*)();
+using RendererConstructor = MVAPI Renderer* (*)();
 struct WindowData;
 struct ImageData;
 struct AudioData;
 struct FontData;
 struct Window {
   Window(std::string_view title, RendererConstructor renderer = nullptr);
+  bool opened;
 
   std::shared_ptr<WindowData> data = nullptr;
 };
@@ -35,24 +39,28 @@ struct Image {
   void setPixel(glm::vec2 pos, Color color) { setPixel(pos.x, pos.y, color); }
   Color getPixel(glm::vec2 pos) { return getPixel(pos.x, pos.y); }
   glm::vec2 size() { return glm::vec2(width, height); }
+#else
+  VectorMath::vec2i size() { return VectorMath::vec2i(width, height); }
 #endif
+  void setPixel(VectorMath::vec2i pos, Color color) { setPixel(pos.x, pos.y, color); }
+  Color getPixel(VectorMath::vec2i pos) { return getPixel(pos.x, pos.y); }
 
   int width, height;
-  std::shared_ptr<ImageData> data = nullptr;
+  std::shared_ptr<ImageData> data;
 };
 
 struct Audio {
   Audio() = default;
   Audio(std::string filename);
 
-  std::shared_ptr<AudioData> data = nullptr;
+  std::shared_ptr<AudioData> data;
 };
 
 struct Font {
   Font() = default;
   Font(std::string filename);
 
-  std::shared_ptr<FontData> data = nullptr;
+  std::shared_ptr<FontData> data;
 };
 
 enum MouseButton : uint8_t {
@@ -101,63 +109,63 @@ enum class Key {
 };
 // clang-format on
 
-void clear(Color color = Color::black);
-void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness = 3);
-void drawRect(int x, int y, int w, int h, Color color, int thickness = 3);
-void fillRect(int x, int y, int w, int h, Color color);
-void roundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
-void fillRoundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
-void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
+MVAPI void clear(Color color = Color::black);
+MVAPI void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness = 3);
+MVAPI void drawRect(int x, int y, int w, int h, Color color, int thickness = 3);
+MVAPI void fillRect(int x, int y, int w, int h, Color color);
+MVAPI void roundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
+MVAPI void fillRoundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
+MVAPI void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
 
-void drawText(int x, int y, std::string text, Color color = Color::white);
-void setFont(Font font, int size);
-uint32_t textWidth(std::string text);
-uint32_t textHeight(std::string text);
+MVAPI void drawText(int x, int y, std::string text, Color color = Color::white);
+MVAPI void setFont(Font font, int size);
+MVAPI uint32_t textWidth(std::string text);
+MVAPI uint32_t textHeight(std::string text);
 
-uint32_t getViewportWidth();
-uint32_t getViewportHeight();
+MVAPI uint32_t getViewportWidth();
+MVAPI uint32_t getViewportHeight();
 
-void setContext(const Window& window);
-void nextFrame();
+MVAPI void setContext(const Window& window);
+MVAPI void nextFrame();
 
-float deltaTime();
+MVAPI float deltaTime();
 
-char getCharPressed();
-bool isKeyHeld(Key key);
-bool isKeyPressed(Key key);
-bool isKeyReleased(Key key);
-bool isKeyRepeated(Key key);
+MVAPI char getCharPressed();
+MVAPI bool isKeyHeld(Key key);
+MVAPI bool isKeyPressed(Key key);
+MVAPI bool isKeyReleased(Key key);
+MVAPI bool isKeyRepeated(Key key);
 
-bool isMouseButtonHeld(MouseButton button);
-bool isMouseButtonPressed(MouseButton button);
-bool isMouseButtonReleased(MouseButton button);
+MVAPI bool isMouseButtonHeld(MouseButton button);
+MVAPI bool isMouseButtonPressed(MouseButton button);
+MVAPI bool isMouseButtonReleased(MouseButton button);
 
-int getMouseX();
-int getMouseY();
+MVAPI int getMouseX();
+MVAPI int getMouseY();
 
-int getMouseDeltaX();
-int getMouseDeltaY();
+MVAPI int getMouseDeltaX();
+MVAPI int getMouseDeltaY();
 
-float getScrollX();
-float getScrollY();
+MVAPI float getScrollX();
+MVAPI float getScrollY();
 
-void setCursor(Cursor cursor);
-void setCursor(Image cursor, int x = 0, int y = 0);
-void pointerLock(bool state);
+MVAPI void setCursor(Cursor cursor);
+MVAPI void setCursor(Image cursor, int x = 0, int y = 0);
+MVAPI void pointerLock(bool state);
 
-void copyToClipboard(std::string_view s);
-void copyToClipboard(Image& image);
-std::string getClipboardContent();
+MVAPI void copyToClipboard(std::string_view s);
+MVAPI void copyToClipboard(Image& image);
+MVAPI std::string getClipboardContent();
 
-void sleep(uint32_t ms);
+MVAPI void sleep(uint32_t ms);
 
 using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
 using ScrollCallback = void (*)(float deltaX, float deltaY);
 using KeyCallback = void (*)(Key key, char character, bool state, bool repeat);
 
-void setScrollCallback(ScrollCallback callback);
-void setMouseCallback(MouseCallback callback);
-void setKeyCallback(KeyCallback callback);
+MVAPI void setScrollCallback(ScrollCallback callback);
+MVAPI void setMouseCallback(MouseCallback callback);
+MVAPI void setKeyCallback(KeyCallback callback);
 
 #if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
 inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
@@ -173,26 +181,21 @@ inline glm::vec2 getViewportSize() { return glm::vec2(getViewportWidth(), getVie
 inline glm::vec2 getMousePos() { return glm::vec2(getMouseX(), getMouseY()); }
 inline glm::vec2 getMouseDelta() { return glm::vec2(getMouseDeltaX(), getMouseDeltaY()); }
 inline glm::vec2 getScroll() { return glm::vec2(getScrollX(), getScrollY()); }
+#else
+inline VectorMath::vec2i textSize(std::string text) { return VectorMath::vec2i(textWidth(text), textHeight(text)); }
+inline VectorMath::vec2i getViewportSize() { return VectorMath::vec2i(getViewportWidth(), getViewportHeight()); }
+inline VectorMath::vec2i getMousePos() { return VectorMath::vec2i(getMouseX(), getMouseY()); }
+inline VectorMath::vec2i getMouseDelta() { return VectorMath::vec2i(getMouseDeltaX(), getMouseDeltaY()); }
+inline VectorMath::vec2i getScroll() { return VectorMath::vec2i(getScrollX(), getScrollY()); }
 #endif
-
-void _clear(Color color);
-void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness);
-void _drawRect(int x, int y, int w, int h, Color color, int thickness);
-void _fillRect(int x, int y, int w, int h, Color color);
-void _roundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4);
-void _fillRoundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4);
-void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH);
-void _drawText(int x, int y, std::string text, Color color);
-void _setFont(Font font, int size);
-uint32_t _textWidth(std::string text);
-uint32_t _textHeight(std::string text);
-uint32_t _getViewportWidth();
-uint32_t _getViewportHeight();
-void _nextFrame();
-
-void _mouseCallback(Window* window, int mouseX, int mouseY, int deltaX, int deltaY, uint8_t buttons);
-void _mouseScrollCallback(float deltaX, float deltaY);
-void _keyCallback(Key key, char ch, bool state, bool repeat);
+inline void drawLine(VectorMath::vec2i from, VectorMath::vec2i to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
+inline void drawRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color, int thickness = 3) { drawRect(pos.x, pos.y, size.x, size.y, color, thickness); }
+inline void fillRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
+inline void roundRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1) { roundRect(pos.x, pos.y, size.x, size.y, color, r1, r2, r3, r4); }
+inline void fillRoundRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1) { fillRoundRect(pos.x, pos.y, size.x, size.y, color, r1, r2, r3, r4); }
+inline void drawImage(Image& image, VectorMath::vec2i pos, VectorMath::vec2i size = VectorMath::vec2i(-1), Flip flip = FLIP_NONE, VectorMath::vec2i srcPos = VectorMath::vec2i(0), VectorMath::vec2i srcSize = VectorMath::vec2i(-1)) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
+inline void drawText(VectorMath::vec2i pos, std::string text, Color color = Color::white) { drawText(pos.x, pos.y, text, color); }
+inline void setCursor(Image cursor, VectorMath::vec2i pos) { setCursor(cursor, pos.x, pos.y); }
 }  // namespace Mova
 
 using MvCursor = Mova::Cursor;

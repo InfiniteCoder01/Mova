@@ -6,7 +6,7 @@
 #define MV_LOG(...) { printf("Log %s:%d: ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); }
 #define MV_WARN(...) { printf("Warning: "); printf(__VA_ARGS__); printf("\n"); }
 #define MV_ERR(...) { fprintf(stderr, "Error %s:%d: ", __FILE__, __LINE__); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }
-#define MV_FATALERR(...) { MV_ERR(__VA_ARGS__); exit(-1); }
-#define MV_ASSERT(expr, ...) if (!(expr)) { fprintf(stderr, "Assertion failed at %s:%d: ", __FILE__, __LINE__); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
+#define MV_FATALERR(...) { MV_ERR(__VA_ARGS__); fflush(stderr); exit(-1); }
+#define MV_ASSERT(expr, ...) if (!(expr)) { fprintf(stderr, "Assertion failed at %s:%d: ", __FILE__, __LINE__); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); exit(-1); }
 #define MV_WASSERT(expr, ...) if (!(expr)) { MV_WARN(__VA_ARGS__); }
 // clang-format on

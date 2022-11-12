@@ -1,10 +1,13 @@
 #include "mova.h"
-#ifdef __EMSCRIPTEN__
+#include "movaPrivate.h"
+#if defined(__EMSCRIPTEN__)
 #include <map>
 #include <string>
 #include <emscripten.h>
 #include <emscripten/val.h>
 #include <emscripten/html5.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "lib/stb_image.h"
 
 using emscripten::val;
 
@@ -18,6 +21,10 @@ static val getTempCanvas();
 static EM_BOOL mouseScrollCallback(int eventType, const EmscriptenWheelEvent* e, void* userData);
 static EM_BOOL mouseCallback(int eventType, const EmscriptenMouseEvent* e, void* userData);
 static EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData);
+
+void _mouseCallback(Window* window, int mouseX, int mouseY, int deltaX, int deltaY, uint8_t buttons);
+void _mouseScrollCallback(float deltaX, float deltaY);
+void _keyCallback(Key key, char ch, bool state, bool repeat);
 
 /* --------------- Data struct --------------- */
 static WindowData* context;
@@ -36,7 +43,7 @@ struct WindowData {
 
 struct ImageData {
   Texture texture;
-  bool antialiasing, immContent = false, changed = false, tchanged = false;
+  bool antialiasing, immContent = false, changed = true, tchanged = true;
   char* content;
   val dataURL;
   val JSimage;
@@ -115,7 +122,7 @@ uint32_t _textHeight(std::string text) { return context->context.call<val>("meas
 uint32_t _getViewportWidth() { return context->canvas["width"].as<uint32_t>(); }
 uint32_t _getViewportHeight() { return context->canvas["height"].as<uint32_t>(); }
 
-void setContext(const Window& window) {
+MVAPI void setContext(const Window& window) {
   context = window.data.get();
   if (context->renderer) {
     contextType = ContextType::RENDERER;
@@ -127,15 +134,23 @@ void setContext(const Window& window) {
 }
 
 void _nextFrame() {
+  if (!val::global("window")["mova"].isUndefined() && val::global("window")["mova"]["dragndropfiles"].isArray()) {
+    size_t n = val::global("window")["mova"]["dragndropfiles"]["length"].as<size_t>();
+    dragNDropFiles.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+      dragNDropFiles.push_back(val::global("window")["mova"]["dragndropfiles"][i].as<std::string>());
+    }
+    val::global("window")["mova"].set("dragndropfiles", val::array(std::vector<std::string>{}));
+  }
   emscripten_webgl_commit_frame();
   emscripten_sleep(0);
 }
 
-int getMouseX() { return context->mouseX; }
-int getMouseY() { return context->mouseY; }
+MVAPI int getMouseX() { return context->mouseX; }
+MVAPI int getMouseY() { return context->mouseY; }
 
-void copyToClipboard(std::string_view s) { val::global("navigator")["clipboard"].call<void>("writeText", val(s.data())); }
-void copyToClipboard(Image& image) {
+MVAPI void copyToClipboard(std::string_view s) { val::global("navigator")["clipboard"].call<void>("writeText", val(s.data())); }
+MVAPI void copyToClipboard(Image& image) {
   // val::global("navigator")["clipboard"].call<void>("write", val(s.data()));
 }
 
@@ -147,23 +162,48 @@ EM_ASYNC_JS(char*, _mova_readClipboardText, (), {
   return stringOnWasmHeap;
 });
 
-std::string getClipboardContent() {
+MVAPI std::string getClipboardContent() {
   char* text = _mova_readClipboardText();
   std::string str = std::string(text);
   free(text);
   return str;
 }
 
-void sleep(uint32_t ms) { emscripten_sleep(ms); }
+MVAPI void sleep(uint32_t ms) { emscripten_sleep(ms); }
 
 /* --------------- Structs --------------- */
-Window::Window(std::string_view title, RendererConstructor createRenderer) : data(new WindowData()) {
+Window::Window(std::string_view title, RendererConstructor createRenderer) : data(new WindowData()), opened(true) {
   emscripten_set_window_title(title.data());
   // clang-format off
-  EM_ASM(addOnPostRun(function() { if (Module.canvas) Module.canvas.focus(); }););
+  EM_ASM(addOnPostRun(function() {
+    window.mova = {};
+    FS.mkdir('/mova');
+    if (Module.canvas) {
+      Module.canvas.focus();
+      Module.canvas.ondragover = e => e.preventDefault();
+      Module.canvas.ondrop = e => {
+        e.preventDefault();
+        let files = [];
+        [...e.dataTransfer.items, ...e.dataTransfer.files].forEach((item, i) => {
+          if (item.kind === 'file') {
+            files.push(item.getAsFile());
+            let reader = new FileReader();
+            reader.onload = f => {
+              if(!FS.analyzePath('/mova/dragndrop').exists) FS.mkdir('/mova/dragndrop');
+              FS.writeFile('/mova/dragndrop/' + f.target.filename, new Uint8Array(f.target.result));
+              if(!window.mova.dragndropfiles) window.mova.dragndropfiles = [];
+              window.mova.dragndropfiles.push('/mova/dragndrop/' + f.target.filename);
+            };
+            reader.filename = item.getAsFile().name;
+            reader.readAsArrayBuffer(item.getAsFile());
+          }
+        });
+      };
+    }
+  }););
   // clang-format on
   data->canvas = val::global("document").call<val>("getElementById", val("canvas"));
-  if (createRenderer != nullptr) {
+  if (createRenderer) {
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
     data->glContext = emscripten_webgl_create_context("#canvas", &attrs);
@@ -192,6 +232,10 @@ WindowData::~WindowData() {
 Image::Image(std::string_view filename, bool antialiasing) : data(new ImageData()) {
   data->antialiasing = antialiasing;
   data->content = emscripten_get_preloaded_image_data(filename.data(), &width, &height);
+  if (!data->content) {
+    int n;
+    data->content = (char*)stbi_load(filename.data(), &width, &height, &n, 4);
+  }
   data->changed = data->tchanged = true;
 }
 
@@ -233,10 +277,6 @@ Texture Image::asTexture(bool mutible, bool tiling) {
 
 void Image::setPixel(int x, int y, Color color) {
   ((uint32_t*)data->content)[x + y * width] = color.value;
-  // data->content[(x + y * width) * 4] = color.r;
-  // data->content[(x + y * width) * 4 + 1] = color.g;
-  // data->content[(x + y * width) * 4 + 2] = color.b;
-  // data->content[(x + y * width) * 4 + 3] = color.a;
   data->changed = data->tchanged = true;
 }
 
@@ -369,8 +409,8 @@ std::map<Cursor, std::string> cursorMap = {
 };
 // clang-format on
 
-void setCursor(Cursor cursor) { context->canvas["style"].set("cursor", cursorMap[cursor]); }
-void setCursor(Image cursor, int x, int y) {
+MVAPI void setCursor(Cursor cursor) { context->canvas["style"].set("cursor", cursorMap[cursor]); }
+MVAPI void setCursor(Image cursor, int x, int y) {
   if (cursor.data->changed) {
     loadImage(&cursor);
     cursor.data->changed = false;
@@ -379,7 +419,7 @@ void setCursor(Image cursor, int x, int y) {
   else context->canvas["style"].set("cursor", "url(" + cursor.data->dataURL.as<std::string>() + "), auto");
 }
 
-void pointerLock(bool state) {
+MVAPI void pointerLock(bool state) {
   EmscriptenPointerlockChangeEvent e;
   emscripten_get_pointerlock_status(&e);
   if (!e.isActive && state) emscripten_request_pointerlock("#canvas", true);
