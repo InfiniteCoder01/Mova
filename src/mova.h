@@ -1,58 +1,62 @@
 #pragma once
-
+#include <platform.h>
+#include <lib/logassert.h>
+#include <map>
 #include <memory>
 #include <string_view>
 
-#include "renderer.h"
-#include "logassert.h"
-
 namespace Mova {
-enum class ContextType { DEFAULT, RENDERER };
-extern ContextType contextType;
+typedef std::shared_ptr<unsigned int> Texture;
+struct Renderer;
+struct Color {
+  constexpr Color() : value(0) {}
+  constexpr Color(uint32_t value) : value(value) {}
+  constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
 
-using RendererConstructor = Renderer* (*)();
-struct WindowData;
-struct ImageData;
-struct AudioData;
-struct FontData;
-struct Window {
-  Window(std::string_view title, RendererConstructor renderer = nullptr);
+  union {
+    struct {
+      uint8_t r, g, b, a;
+    };
+    uint32_t value;
+  };
 
-  std::shared_ptr<WindowData> data = nullptr;
+  bool operator==(const Color& other) { return value == other.value; }
+
+  static Color hsv(uint16_t h, uint8_t s, uint8_t v);
+
+  static const Color black, white, gray, darkgray, alpha;
+  static const Color red, green, blue;
 };
 
-struct Image {
-  Image() = default;
-  Image(std::string_view filename, bool antialiasing = true);
-  Image(int width, int height, const char* content = nullptr, bool antialiasing = false);
-
-  Texture asTexture(bool mutible = false, bool tiling = false);
-  void setPixel(int x, int y, Color color);
-  Color getPixel(int x, int y);
-  Image clone();
-
-#if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
-  void setPixel(glm::vec2 pos, Color color) { setPixel(pos.x, pos.y, color); }
-  Color getPixel(glm::vec2 pos) { return getPixel(pos.x, pos.y); }
-  glm::vec2 size() { return glm::vec2(width, height); }
-#endif
-
-  int width, height;
-  std::shared_ptr<ImageData> data = nullptr;
+// clang-format off
+enum class Cursor {
+  Default, None,
+  Help, Hand,
+  Progress, Wait,
+  Crosshair, Text,
+  Move, NotAllowed,
+  Grab, Grabbing,
+  NSResize, EWResize, NESWResize, NWSEResize,
+  ZoomIn, ZoomOut,
 };
 
-struct Audio {
-  Audio() = default;
-  Audio(std::string filename);
-
-  std::shared_ptr<AudioData> data = nullptr;
-};
-
-struct Font {
-  Font() = default;
-  Font(std::string filename);
-
-  std::shared_ptr<FontData> data = nullptr;
+enum class Key {
+  Tab,
+  ArrowLeft, ArrowRight, ArrowUp, ArrowDown,
+  PageUp, PageDown, Home, End,
+  Insert, Delete, Backspace,
+  Space, Enter, Escape,
+  Apostrophe, Comma, Minus, Period, Slash, Semicolon,
+  BracketLeft, Backslash, BracketRight, GraveAccent,
+  CapsLock, ScrollLock, NumLock, PrintScreen,
+  Pause,
+  Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9,
+  NumpadDecimal, NumpadDivide, NumpadMultiply, NumpadSubtract, NumpadAdd, NumpadEnter, NumpadEqual,
+  ShiftLeft, CtrlLeft, AltLeft, MetaLeft, ShiftRight, CtrlRight, AltRight, MetaRight, ContextMenu,
+  Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9,
+  A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+  F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+  Unknown
 };
 
 enum MouseButton : uint8_t {
@@ -67,140 +71,102 @@ enum Flip : uint8_t {
   FLIP_VERTICAL = 2,
   FLIP_BOTH = 3,
 };
-
-// clang-format off
-enum class Cursor {
-  Default, None,
-  ContextMenu, Help, Hand,
-  Progress, Wait,
-  Crosshair, Text, Alias,
-  Move, NotAllowed,
-  Grab, Grabbing,
-  ColResize, RowResize,
-  NSResize, EWResize, NESWResize, NWSEResize,
-  ZoomIn, ZoomOut,
-};
-
-enum class Key {
-  Tab,
-  ArrowLeft, ArrowRight, ArrowUp, ArrowDown,
-  PageUp, PageDown, Home, End,
-  Insert, Delete, Backspace,
-  Space, Enter, Escape,
-  Apostrophe, Comma, Minus, Period, Slash, Semicolon, Equal,
-  BracketLeft, Backslash, BracketRight, GraveAccent,
-  CapsLock, ScrollLock, NumLock, PrintScreen,
-  Pause,
-  Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9,
-  NumpadDecimal, NumpadDivide, NumpadMultiply, NumpadSubtract, NumpadAdd, NumpadEnter, NumpadEqual,
-  ShiftLeft, ControlLeft, AltLeft, MetaLeft, ShiftRight, ControlRight, AltRight, MetaRight, ContextMenu,
-  Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9,
-  A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-  F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
-  Unknown
-};
 // clang-format on
+struct KeyState {
+  bool held : 1;
+  bool pressed : 1;
+  bool released : 1;
+  bool repeated : 1;
+};
 
-void clear(Color color = Color::black);
-void drawLine(int x1, int y1, int x2, int y2, Color color, int thickness = 3);
-void drawRect(int x, int y, int w, int h, Color color, int thickness = 3);
-void fillRect(int x, int y, int w, int h, Color color);
-void roundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
-void fillRoundRect(int x, int y, int w, int h, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1);
-void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1);
+struct MouseButtonState {
+  bool held : 1;
+  bool pressed : 1;
+  bool released : 1;
+};
 
-void drawText(int x, int y, std::string text, Color color = Color::white);
-void setFont(Font font, int size);
-uint32_t textWidth(std::string text);
-uint32_t textHeight(std::string text);
+struct WindowData;
+struct Window {
+  Window(std::string_view title, Renderer* (*renderer)() = nullptr);
+  ~Window();
+  void setTitle(std::string_view title);
 
-uint32_t getViewportWidth();
-uint32_t getViewportHeight();
+  // Props
+  bool isOpen;
+  WindowData* data;
+};
 
-void setContext(const Window& window);
+struct ImageData;
+struct Image {
+  Image(uint32_t width, uint32_t height, unsigned char* data = nullptr);
+  Image(std::string_view filename, bool antialiasing = true);
+  ~Image();
+
+  void setPixel(int x, int y, Color value);
+  Color getPixel(int x, int y);
+  Texture asTexture(bool transperency = false);
+
+  // Props
+  int width, height;
+  unsigned char* content;
+  ImageData* data;
+
+ private:
+  bool antialiasing;
+  Texture texture;
+};
+
+struct Draw {
+  void (*clear)(Color color);
+  void (*fillRect)(int x, int y, int w, int h, Color color);
+  void (*drawImage)(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH);
+};
+
+// API
+void setContext(Window& window);
+int mouseX();
+int mouseY();
+uint32_t viewportWidth();
+uint32_t viewportHeight();
 void nextFrame();
 
-float deltaTime();
-
-char getCharPressed();
-bool isKeyHeld(Key key);
-bool isKeyPressed(Key key);
-bool isKeyReleased(Key key);
-bool isKeyRepeated(Key key);
-
-bool isMouseButtonHeld(MouseButton button);
-bool isMouseButtonPressed(MouseButton button);
-bool isMouseButtonReleased(MouseButton button);
-
-int getMouseX();
-int getMouseY();
-
-int getMouseDeltaX();
-int getMouseDeltaY();
-
+MouseButtonState getMouseButtonState(MouseButton button);
+KeyState getKeyState(Key key);
 float getScrollX();
 float getScrollY();
+float deltaTime();
 
-void setCursor(Cursor cursor);
-void setCursor(Image cursor, int x = 0, int y = 0);
-void pointerLock(bool state);
+// Draw
+extern Draw* g_Draw;
+inline void clear(Color color = Color::black) { g_Draw->clear(color); }
+inline void fillRect(int x, int y, int w, int h, Color color) { g_Draw->fillRect(x, y, w, h, color); }
+inline void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip flip = FLIP_NONE, int srcX = 0, int srcY = 0, int srcW = -1, int srcH = -1) {
+  if (w == -1) w = image.width;
+  if (h == -1) h = image.height;
+  if (srcW == -1) srcW = image.width;
+  if (srcH == -1) srcH = image.height;
+  g_Draw->drawImage(image, x, y, w, h, flip, srcX, srcY, srcW, srcH);
+}
 
-void copyToClipboard(std::string_view s);
-void copyToClipboard(Image& image);
-std::string getClipboardContent();
+// Callbacks
+void addKeyCallback(void (*callback)(Key key, KeyState state, wchar_t character));
+void addMouseCallback(void (*callback)(Window* window, int x, int y, MouseButton button, MouseButtonState state));
+void addScrollCallback(void (*callback)(float deltaX, float deltaY));
+void removeKeyCallback(void (*callback)(Key key, KeyState state, wchar_t character));
+void removeMouseCallback(void (*callback)(Window* window, int x, int y, MouseButton button, MouseButtonState state));
+void removeScrollCallback(void (*callback)(float deltaX, float deltaY));
 
-void sleep(uint32_t ms);
-
-using MouseCallback = void (*)(Window* window, int x, int y, MouseButton button, bool down);
-using ScrollCallback = void (*)(float deltaX, float deltaY);
-using KeyCallback = void (*)(Key key, char character, bool state, bool repeat);
-
-void setScrollCallback(ScrollCallback callback);
-void setMouseCallback(MouseCallback callback);
-void setKeyCallback(KeyCallback callback);
-
-#if __has_include("glm/glm.hpp") || __has_include("glm.hpp")
-inline void drawLine(glm::vec2 from, glm::vec2 to, Color color, int thickness = 3) { drawLine(from.x, from.y, to.x, to.y, color, thickness); }
-inline void drawRect(glm::vec2 pos, glm::vec2 size, Color color, int thickness = 3) { drawRect(pos.x, pos.y, size.x, size.y, color, thickness); }
-inline void fillRect(glm::vec2 pos, glm::vec2 size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
-inline void roundRect(glm::vec2 pos, glm::vec2 size, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1) { roundRect(pos.x, pos.y, size.x, size.y, color, r1, r2, r3, r4); }
-inline void fillRoundRect(glm::vec2 pos, glm::vec2 size, Color color, int r1 = 5, int r2 = -1, int r3 = -1, int r4 = -1) { fillRoundRect(pos.x, pos.y, size.x, size.y, color, r1, r2, r3, r4); }
-inline void drawImage(Image& image, glm::vec2 pos, glm::vec2 size = glm::vec2(-1), Flip flip = FLIP_NONE, glm::vec2 srcPos = glm::vec2(0), glm::vec2 srcSize = glm::vec2(-1)) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
-inline void drawText(glm::vec2 pos, std::string text, Color color = Color::white) { drawText(pos.x, pos.y, text, color); }
-inline void setCursor(Image cursor, glm::vec2 pos) { setCursor(cursor, pos.x, pos.y); }
-inline glm::vec2 textSize(std::string text) { return glm::vec2(textWidth(text), textHeight(text)); }
-inline glm::vec2 getViewportSize() { return glm::vec2(getViewportWidth(), getViewportHeight()); }
-inline glm::vec2 getMousePos() { return glm::vec2(getMouseX(), getMouseY()); }
-inline glm::vec2 getMouseDelta() { return glm::vec2(getMouseDeltaX(), getMouseDeltaY()); }
-inline glm::vec2 getScroll() { return glm::vec2(getScrollX(), getScrollY()); }
-#endif
-
-void _clear(Color color);
-void _drawLine(int x1, int y1, int x2, int y2, Color color, int thickness);
-void _drawRect(int x, int y, int w, int h, Color color, int thickness);
-void _fillRect(int x, int y, int w, int h, Color color);
-void _roundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4);
-void _fillRoundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4);
-void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH);
-void _drawText(int x, int y, std::string text, Color color);
-void _setFont(Font font, int size);
-uint32_t _textWidth(std::string text);
-uint32_t _textHeight(std::string text);
-uint32_t _getViewportWidth();
-uint32_t _getViewportHeight();
 void _nextFrame();
-
-void _mouseCallback(Window* window, int mouseX, int mouseY, int deltaX, int deltaY, uint8_t buttons);
-void _mouseScrollCallback(float deltaX, float deltaY);
-void _keyCallback(Key key, char ch, bool state, bool repeat);
+void _keyCallback(Key key, bool state, bool repeat, wchar_t character);
+void _mouseCallback(Window* window, int x, int y, uint8_t buttons);
+void _scrollCallback(float deltaX, float deltaY);
 }  // namespace Mova
 
-using MvCursor = Mova::Cursor;
 using MvWindow = Mova::Window;
+using MvCursor = Mova::Cursor;
 using MvImage = Mova::Image;
-using MvFont = Mova::Font;
+using MvColor = Mova::Color;
 using MvKey = Mova::Key;
-using Mova::Flip;
 using Mova::FLIP_BOTH;
 using Mova::FLIP_HORIZONTAL;
 using Mova::FLIP_NONE;
@@ -208,4 +174,3 @@ using Mova::FLIP_VERTICAL;
 using Mova::MOUSE_LEFT;
 using Mova::MOUSE_MIDDLE;
 using Mova::MOUSE_RIGHT;
-using Mova::MouseButton;
