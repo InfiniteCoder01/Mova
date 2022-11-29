@@ -1,12 +1,12 @@
 #pragma once
 
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <platform.h>
+#include "GL/gl.h"
+#include "GL/glext.h"
+#include "platform.h"
 
 #ifdef __WINDOWS__
 #define WGL_WGLEXT_PROTOTYPES
-#include <GL/wglext.h>
+#include "GL/wglext.h"
 #endif
 
 // Program

@@ -1,81 +1,60 @@
-#include "renderer.h"
-#include <stdio.h>
+#include <renderer.h>
 
-Renderer* renderer = nullptr;
+namespace Mova {
+Renderer* g_Renderer;
 
-MVAPI Model loadOBJ(std::string_view filepath, unsigned int uvscale) {
-  std::vector<float> tvertices, tnormals, tuvs;
-  std::vector<float> vertices, normals, uvs;
-  FILE* file = fopen(filepath.data(), "rb");
-  wchar_t cmd[256];
-  float x, y, z;
-  size_t i1vert, i1norm, i1uv, i2vert, i2norm, i2uv, i3vert, i3norm, i3uv;
-  while (fgetws(cmd, sizeof(cmd) / sizeof(cmd[0]) - 1, file)) {
-    if (swscanf(cmd, L"v %f %f %f", &x, &y, &z) == 3) {
-      tvertices.push_back(x);
-      tvertices.push_back(y);
-      tvertices.push_back(z);
-    } else if (swscanf(cmd, L"vn %f %f %f", &x, &y, &z) == 3) {
-      tnormals.push_back(x);
-      tnormals.push_back(y);
-      tnormals.push_back(z);
-    } else if (swscanf(cmd, L"vt %f %f %f", &x, &y) == 2) {
-      tuvs.push_back(x * uvscale);
-      tuvs.push_back(y * uvscale);
-    } else if (swscanf(cmd, L"f %zu/%zu/%zu %zu/%zu/%zu %zu/%zu/%zu", &i1vert, &i1uv, &i1norm, &i2vert, &i2uv, &i2norm, &i3vert, &i3uv, &i3norm) == 9) {
-      vertices.push_back(tvertices[i1vert * 3 - 3]);
-      vertices.push_back(tvertices[i1vert * 3 - 2]);
-      vertices.push_back(tvertices[i1vert * 3 - 1]);
-      vertices.push_back(tvertices[i2vert * 3 - 3]);
-      vertices.push_back(tvertices[i2vert * 3 - 2]);
-      vertices.push_back(tvertices[i2vert * 3 - 1]);
-      vertices.push_back(tvertices[i3vert * 3 - 3]);
-      vertices.push_back(tvertices[i3vert * 3 - 2]);
-      vertices.push_back(tvertices[i3vert * 3 - 1]);
-
-      uvs.push_back(tuvs[i1uv * 2 - 2]);
-      uvs.push_back(tuvs[i1uv * 2 - 1]);
-      uvs.push_back(tuvs[i2uv * 2 - 2]);
-      uvs.push_back(tuvs[i2uv * 2 - 1]);
-      uvs.push_back(tuvs[i3uv * 2 - 2]);
-      uvs.push_back(tuvs[i3uv * 2 - 1]);
-
-      normals.push_back(tnormals[i1norm * 3 - 3]);
-      normals.push_back(tnormals[i1norm * 3 - 2]);
-      normals.push_back(tnormals[i1norm * 3 - 1]);
-      normals.push_back(tnormals[i2norm * 3 - 3]);
-      normals.push_back(tnormals[i2norm * 3 - 2]);
-      normals.push_back(tnormals[i2norm * 3 - 1]);
-      normals.push_back(tnormals[i3norm * 3 - 3]);
-      normals.push_back(tnormals[i3norm * 3 - 2]);
-      normals.push_back(tnormals[i3norm * 3 - 1]);
-    }
-  }
-
-  std::shared_ptr<std::vector<VertexAttribArray>> attribArrays(new std::vector<VertexAttribArray>());
-  attribArrays->push_back(renderer->createVertexAttribArray(vertices));
-  attribArrays->push_back(renderer->createVertexAttribArray(uvs, 2));
-  attribArrays->push_back(renderer->createVertexAttribArray(normals));
-  return Model{.m_AttribArrays = attribArrays, .m_VertexCount = vertices.size() / 3};
+static VertexAttribArray rendererRect(int x, int y, int width, int height) {
+  float x1 = x * 2.f / viewportWidth() - 1.f;
+  float y1 = y * -2.f / viewportHeight() + 1.f;
+  float x2 = x1 + width * 2.f / viewportWidth();
+  float y2 = y1 - height * 2.f / viewportHeight();
+  return VertexAttribArray({x1, y1, x1, y2, x2, y2, x2, y1}, 2);
 }
 
-Color Color::hsv(uint16_t h, uint8_t s, uint8_t v) {
-  uint8_t m = v * 255 * (100 - s) / 10000;
-  uint8_t x = s * v * (60 - abs(h % 120 - 60)) * 255 / 10000 / 60 + m;
-  uint8_t y = s * v * 255 / 10000 + m;
-  if (h >= 0 && h < 60) return Color(y, x, m);
-  else if (h >= 60 && h < 120) return Color(x, y, m);
-  else if (h >= 120 && h < 180) return Color(m, y, x);
-  else if (h >= 180 && h < 240) return Color(m, x, y);
-  else if (h >= 240 && h < 300) return Color(x, m, y);
-  else return Color(y, m, x);
+static void _fillRect(int x, int y, int width, int height, Color color) {
+  Mesh mesh = Mesh({rendererRect(x, y, width, height)}, 4);
+  drawMesh(mesh, color, RenderType::TRIANGLE_FAN);
 }
 
-constexpr Color Color::black = Color(0, 0, 0);
-constexpr Color Color::white = Color(255, 255, 255);
-constexpr Color Color::gray = Color(150, 150, 150);
-constexpr Color Color::darkgray = Color(51, 51, 51);
-constexpr Color Color::alpha = Color(0, 0, 0, 0);
-constexpr Color Color::red = Color(255, 0, 0);
-constexpr Color Color::green = Color(0, 255, 0);
-constexpr Color Color::blue = Color(0, 0, 255);
+static void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
+  float u1 = srcX / (float)image.width, v1 = srcY / (float)image.height;
+  float u2 = u1 + srcW / (float)image.width, v2 = v1 + srcH / (float)image.height;
+  if(flip & FLIP_HORIZONTAL) std::swap(u1, u2);
+  if(flip & FLIP_VERTICAL) std::swap(v1, v2);
+  Mesh mesh = Mesh({rendererRect(x, y, w, h), VertexAttribArray({u1, v1, u1, v2, u2, v2, u2, v1}, 2)}, 4);
+  drawMesh(mesh, image.asTexture(true), Color::white, RenderType::TRIANGLE_FAN);
+}
+
+static void _clear(Color color) { g_Renderer->clear(color); }
+
+Draw* getRendererDraw() {
+  static Draw draw = {
+      .clear = _clear,
+      .fillRect = _fillRect,
+      .drawImage = _drawImage,
+  };
+  return &draw;
+}
+
+// clang-format off
+VertexAttribArray::VertexAttribArray(const std::vector<float>& data, unsigned int elementSize) : data(data), elementSize(elementSize) {}
+VertexAttribArray::~VertexAttribArray() { if(ptr) g_Renderer->destroyVertexAttribArray(this); }
+unsigned int VertexAttribArray::size() { return data.size(); }
+float VertexAttribArray::get(unsigned int index) { return data[index]; }
+float& VertexAttribArray::operator[](unsigned int index) { return modified = true, data[index]; }
+void VertexAttribArray::add(float value) { modified = true, data.push_back(value); }
+void VertexAttribArray::remove(unsigned int index) { modified = true, data.erase(data.begin() + index); }
+void VertexAttribArray::clear() { modified = true, data.clear(); }
+const float* VertexAttribArray::getData() { return data.data(); }
+
+Mesh::Mesh(const std::vector<VertexAttribArray>& arrays, unsigned int vertexCount) : arrays(arrays), vertexCount(vertexCount) {}
+Mesh::~Mesh() { g_Renderer->destroyMesh(this); }
+unsigned int Mesh::getArrayCount() { return arrays.size(); }
+const VertexAttribArray& Mesh::get(unsigned int index) { return arrays[index]; }
+VertexAttribArray& Mesh::operator[](unsigned int index) { return modified = true, arrays[index]; }  // TODO: should it set modified flag?
+void Mesh::add(const VertexAttribArray& value) { modified = true, arrays.push_back(value); }
+void Mesh::remove(unsigned int index) { modified = true, arrays.erase(arrays.begin() + index); }
+void Mesh::clear() { modified = true, arrays.clear(); }
+std::vector<VertexAttribArray>& Mesh::getArrays() { return arrays; }
+// clang-format on
+}  // namespace Mova

@@ -11,18 +11,18 @@ inline int wrap(int val, int _max) {
   return val % _max;
 }
 
-template <typename T, typename T1> inline T align(T val, T1 alignment) { return int(val / alignment) * alignment; }
-template <typename T, typename T1> inline T alignUp(T val, T1 alignment) { return int((val + alignment - 1) / alignment) * alignment; }
+template <typename T> inline T align(T val, T alignment) { return int(val / alignment) * alignment; }
+template <typename T> inline T alignUp(T val, T alignment) { return int((val + alignment - 1) / alignment) * alignment; }
 
-template <typename T, typename T1> inline T lerp(T a, T1 b, float t) { return a * (1 - t) + b * t; }
-template <typename T, typename T1> inline void swap(T& a, T1& b) {
+template <typename T> inline T lerp(T a, T b, float t) { return a * (1 - t) + b * t; }
+template <typename T> inline void swap(T& a, T& b) {
   T temp = a;
   a = b;
   b = temp;
 }
 
-template <typename T, typename T1> inline T min(T a, T1 b) { return a < b ? a : b; }
-template <typename T, typename T1> inline T max(T a, T1 b) { return a > b ? a : b; }
+template <typename T> inline T min(T a, T b) { return a < b ? a : b; }
+template <typename T> inline T max(T a, T b) { return a > b ? a : b; }
 }  // namespace Math
 
 namespace VectorMath {

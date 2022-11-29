@@ -127,6 +127,7 @@ class OpenGLRenderer : public Renderer {
   }
 
   void defaultShader() override {
+    #if defined(__EMSCRIPTEN__)
     static const char* vertex = R"(
       attribute vec4 a_Position;
       attribute vec4 a_TexCoord;
@@ -150,6 +151,33 @@ class OpenGLRenderer : public Renderer {
         gl_FragColor = texture2D(u_Texture, 1.0 - uv) * u_Color;
       }
     )";
+    #elif defined(__WINDOWS__)
+    static const char* vertex = R"(
+      #version 330 core
+      in vec4 v_Position;
+      in vec4 v_TexCoord;
+      out vec2 vPixelTexCoord;
+
+      void main() {
+        gl_Position = v_Position;
+        vPixelTexCoord = v_TexCoord.xy;
+      }
+    )";
+    static const char* fragment = R"(
+      #version 330 core
+
+      uniform vec4 u_Color;
+      uniform sampler2D u_Texture;
+
+      in vec2 vPixelTexCoord;
+      out vec4 FragColor;
+
+      void main() {
+        FragColor = texture2D(u_Texture, vPixelTexCoord) * u_Color;
+      }
+    )";
+    #endif
+
     static Shader shader;
     if (!shader) shader = createShader(vertex, fragment);
     useShader(shader);
@@ -265,4 +293,4 @@ class OpenGLRenderer : public Renderer {
   }
 };
 
-MVAPI Renderer* openGLRenderer() { return new OpenGLRenderer(); }
+Renderer* openGLRenderer() { return new OpenGLRenderer(); }

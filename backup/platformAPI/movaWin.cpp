@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <windows.h>
+#include <windowsx.h>
 #include <GL/gl.h>
 #define WGL_WGLEXT_PROTOTYPES
 #include "GL/wglext.h"
@@ -12,13 +13,18 @@
 
 namespace Mova {
 template <typename K, typename V> static V getOrDefault(const std::map<K, V>& m, const K& key, const V& def);
-static void loadImage(Image* img);
+static HCURSOR g_Cursor;
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 void _mouseCallback(Window* window, int mouseX, int mouseY, int deltaX, int deltaY, uint8_t buttons);
 void _mouseScrollCallback(float deltaX, float deltaY);
 void _keyCallback(Key key, char ch, bool state, bool repeat);
+
+enum ImageBits : uint8_t {
+  IMAGE_TEXTURE_BIT,
+  IMAGE_ICON_BIT,
+};
 
 /* --------------- Data struct --------------- */
 static WindowData* context;
@@ -34,9 +40,14 @@ struct WindowData {
 };
 
 struct ImageData {
-  Texture texture;
-  bool antialiasing, immContent = false, changed = false, tchanged = false;
+  Image* parent;
+  bool antialiasing, immContent = false;
+  uint8_t changed = 0xff;
   char* content;
+
+  Texture asTexture(bool mutible, bool tiling);
+  HICON asIcon(int x, int y);
+
   ~ImageData();
 };
 
@@ -58,7 +69,6 @@ void _roundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r
 void _fillRoundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4) {}
 void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
   if (image.data->changed) {
-    loadImage(&image);
     image.data->changed = false;
   }
 }
@@ -71,15 +81,15 @@ uint32_t _textHeight(std::string text) { return -1; }
 
 uint32_t _getViewportWidth() {
   RECT rect;
-  return GetWindowRect(context->hWnd, &rect), rect.right - rect.left;
+  return GetClientRect(context->hWnd, &rect), rect.right - rect.left;
 }
 
 uint32_t _getViewportHeight() {
   RECT rect;
-  return GetWindowRect(context->hWnd, &rect), rect.bottom - rect.top;
+  return GetClientRect(context->hWnd, &rect), rect.bottom - rect.top;
 }
 
-MVAPI void setContext(const Window& window) {
+void setContext(const Window& window) {
   context = window.data.get();
   if (context->renderer) {
     contextType = ContextType::RENDERER;
@@ -102,14 +112,14 @@ void _nextFrame() {
   }
 }
 
-MVAPI int getMouseX() { return context->mouseX; }
-MVAPI int getMouseY() { return context->mouseY; }
+int getMouseX() { return context->mouseX; }
+int getMouseY() { return context->mouseY; }
 
-MVAPI void copyToClipboard(std::string_view s) {}
-MVAPI void copyToClipboard(Image& image) {}
-MVAPI std::string getClipboardContent() { return ""; }
+void copyToClipboard(std::string_view s) {}
+void copyToClipboard(Image& image) {}
+std::string getClipboardContent() { return ""; }
 
-MVAPI void sleep(uint32_t ms) { Sleep(ms); }
+void sleep(uint32_t ms) { Sleep(ms); }
 
 /* --------------- Structs --------------- */
 Window::Window(std::string_view title, RendererConstructor createRenderer) : data(new WindowData()), opened(true) {
@@ -185,7 +195,8 @@ Image::Image(std::string_view filename, bool antialiasing) : data(new ImageData(
   data->antialiasing = antialiasing;
   int n;
   data->content = (char*)stbi_load(filename.data(), &width, &height, &n, 4);
-  data->changed = data->tchanged = true;
+  data->changed = 0xff;
+  data->parent = this;
 }
 
 Image::Image(int width, int height, const char* content, bool antialiasing) : width(width), height(height), data(new ImageData()) {
@@ -203,7 +214,67 @@ Image::Image(int width, int height, const char* content, bool antialiasing) : wi
   } else {
     data->content = (char*)content;
   }
-  data->changed = data->tchanged = true;
+  data->changed = 0xff;
+  data->parent = this;
+}
+
+Texture ImageData::asTexture(bool mutible, bool tiling) {
+  static Texture texture;
+  if (!texture) {
+    puts("Creating texture");
+    texture = renderer->createTexture(parent->width, parent->height, content, antialiasing, mutible, tiling);
+    changed &= ~IMAGE_TEXTURE_BIT;
+  }
+  if (changed & IMAGE_TEXTURE_BIT) {
+    renderer->modifyTexture(texture, parent->width, parent->height, content, antialiasing, mutible, tiling);
+    changed &= ~IMAGE_TEXTURE_BIT;
+  }
+  return texture;
+}
+
+HICON ImageData::asIcon(int x, int y) {
+  static HICON icon;
+
+  // if (!icon || changed & IMAGE_ICON_BIT) {
+  if (icon) DestroyIcon(icon);
+  puts("Whyyyyyy????");
+
+  HBITMAP mask = NULL;
+  HBITMAP color = NULL;
+  {
+    HDC hDC = GetDC(nullptr);
+    HDC maskDC = CreateCompatibleDC(hDC);
+    HDC colorDC = CreateCompatibleDC(hDC);
+    mask = CreateCompatibleBitmap(hDC, parent->width, parent->height);
+    color = CreateCompatibleBitmap(hDC, parent->width, parent->height);
+    HBITMAP hOldAndMaskBitmap = (HBITMAP)SelectObject(maskDC, mask);
+    HBITMAP hOldXorMaskBitmap = (HBITMAP)SelectObject(colorDC, color);
+    for (int x = 0; x < parent->width; x++) {
+      for (int y = 0; y < parent->height; y++) {
+        Color pixel = Color(((uint32_t*)content)[x + y * parent->width]);
+        SetPixel(maskDC, x, y, RGB(255 - pixel.a, 255 - pixel.a, 255 - pixel.a));
+        SetPixel(colorDC, x, y, RGB(pixel.r, pixel.g, pixel.b));
+      }
+    }
+    SelectObject(maskDC, hOldAndMaskBitmap);
+    SelectObject(colorDC, hOldXorMaskBitmap);
+
+    DeleteDC(maskDC);
+    DeleteDC(colorDC);
+
+    ReleaseDC(nullptr, hDC);
+  }
+  ICONINFO iconinfo = {
+      .fIcon = FALSE,
+      .xHotspot = (uint32_t)x,
+      .yHotspot = (uint32_t)y,
+      .hbmMask = mask,
+      .hbmColor = color,
+  };
+  icon = CreateIconIndirect(&iconinfo);
+  changed &= ~IMAGE_ICON_BIT;
+  // }
+  return icon;
 }
 
 ImageData::~ImageData() {
@@ -212,21 +283,11 @@ ImageData::~ImageData() {
   }
 }
 
-Texture Image::asTexture(bool mutible, bool tiling) {
-  if (!data->texture) {
-    data->texture = renderer->createTexture(width, height, data->content, data->antialiasing, mutible, tiling);
-    data->tchanged = false;
-  }
-  if (data->tchanged) {
-    renderer->modifyTexture(data->texture, width, height, data->content, data->antialiasing, mutible, tiling);
-    data->tchanged = false;
-  }
-  return data->texture;
-}
+Texture Image::asTexture(bool mutible, bool tiling) { return data->asTexture(mutible, tiling); }
 
 void Image::setPixel(int x, int y, Color color) {
   ((uint32_t*)data->content)[x + y * width] = color.value;
-  data->changed = data->tchanged = true;
+  data->changed = 0xff;
 }
 
 Color Image::getPixel(int x, int y) { return Color(((uint32_t*)data->content)[x + y * width]); }
@@ -272,7 +333,7 @@ std::map<std::string, Key> keyMap = {
   {"NumpadDecimal", Key::NumpadDecimal}, {"NumpadDivide", Key::NumpadDivide}, {"NumpadMultiply", Key::NumpadMultiply},
   {"NumpadSubtract", Key::NumpadSubtract}, {"NumpadAdd", Key::NumpadAdd},
   {"NumpadEnter", Key::NumpadEnter}, {"NumpadEqual", Key::NumpadEqual},
-  {"ShiftLeft", Key::ShiftLeft}, {"ControlLeft", Key::ControlLeft}, {"AltLeft", Key::AltLeft}, {"MetaLeft", Key::MetaLeft},
+  {"ShiftLeft", Key::ShiftLeft}, {"CtrlLeft", Key::CtrlLeft}, {"AltLeft", Key::AltLeft}, {"MetaLeft", Key::MetaLeft},
   {"ShiftRight", Key::ShiftRight}, {"ControlRight", Key::ControlRight}, {"AltRight", Key::AltRight}, {"MetaRight", Key::MetaRight},
   {"ContextMenu", Key::ContextMenu},
   {"Digit0", Key::Digit0}, {"Digit1", Key::Digit1}, {"Digit2", Key::Digit2}, {"Digit3", Key::Digit3}, {"Digit4", Key::Digit4},
@@ -296,23 +357,58 @@ std::map<Cursor, std::string> cursorMap = {
   {Cursor::NSResize, "ns-resize"}, {Cursor::EWResize, "ew-resize"}, {Cursor::NESWResize, "nesw-resize"}, {Cursor::NWSEResize, "nwse-resize"},
   {Cursor::ZoomIn, "zoom-in"}, {Cursor::ZoomOut, "zoom-out"},
 };
+
+static HCURSOR getCursor(Cursor cursor) {
+  static std::map<Cursor, HCURSOR> cursorMap;
+  if(cursorMap.empty()) {
+    std::map<Cursor, LPCSTR> cursorNames = {
+      {Cursor::Default, IDC_ARROW}, {Cursor::None, IDC_ICON},
+      {Cursor::ContextMenu, IDC_ARROW}, {Cursor::Help, IDC_HELP}, {Cursor::Hand, IDC_HAND},
+      {Cursor::Progress, IDC_APPSTARTING}, {Cursor::Wait, IDC_WAIT},
+      {Cursor::Crosshair, IDC_CROSS}, {Cursor::Text, IDC_IBEAM}, {Cursor::Alias, IDC_ARROW},
+      {Cursor::Move, IDC_SIZEALL}, {Cursor::NotAllowed, IDC_NO},
+      {Cursor::Grab, "grab"}, {Cursor::Grabbing, "grabbing"},
+      {Cursor::ColResize, "col-resize"}, {Cursor::RowResize, "row-resize"},
+      {Cursor::NSResize, IDC_SIZENS}, {Cursor::EWResize, IDC_SIZEWE}, {Cursor::NESWResize, IDC_SIZENESW}, {Cursor::NWSEResize, IDC_SIZENWSE},
+      {Cursor::ZoomIn, "zoom-in"}, {Cursor::ZoomOut, "zoom-out"},
+    };
+    for(const auto& cursor : cursorNames) cursorMap[cursor.first] = LoadCursor(nullptr, cursor.second);
+  }
+  return cursorMap[cursor];
+}
 // clang-format on
 
-MVAPI void setCursor(Cursor cursor) {}
-MVAPI void setCursor(Image cursor, int x, int y) {
-  if (cursor.data->changed) {
-    loadImage(&cursor);
-    cursor.data->changed = false;
-  }
-}
+void setCursor(Cursor cursor) { g_Cursor = getCursor(cursor); }
+void setCursor(Image cursor, int x, int y) { g_Cursor = cursor.data->asIcon(x, y); }
 
-MVAPI void pointerLock(bool state) {}
+void pointerLock(bool state) {}
 
 /*                    CALLBACKS                    */
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+  Window* window = ((Window*)GetWindowLongPtr(hWnd, GWLP_USERDATA));
   switch (msg) {
+    // case WM_KEYDOWN:
+    //   _keyCallback(key, state && e->key[1] == '\0' ? e->key[0] : '\0', state, e->repeat);
+    //   break;
+    case WM_SETCURSOR:
+      SetCursor(g_Cursor);
+      break;
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONUP:
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_MOUSEMOVE: {
+      static int lastX, lastY;
+      int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+      uint8_t buttons = (wParam & MK_LBUTTON ? MOUSE_LEFT : 0) | (wParam & MK_MBUTTON ? MOUSE_MIDDLE : 0) | (wParam & MK_RBUTTON ? MOUSE_RIGHT : 0);
+      _mouseCallback(window, x, y, x - lastX, y - lastY, buttons);
+      lastX = x, lastY = y;
+      window->data->mouseX = x, window->data->mouseY = y;
+    } break;
     case WM_CLOSE:
-      ((Window*)GetWindowLongPtr(hWnd, GWLP_USERDATA))->opened = false;
+      window->opened = false;
       break;
     default:
       return DefWindowProc(hWnd, msg, wParam, lParam);

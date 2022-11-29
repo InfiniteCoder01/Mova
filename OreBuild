@@ -1,19 +1,28 @@
 platform "Windows" {
     command: "g++ $files -o $out -I*$include";
-    submoduleCommand: "*g++ -c $files -o $out -I*$include";
+    submoduleCommand: "*g++ -c $files -o $out -I*$include -D _DEBUG";
 }
 
 module "Mova" {
     path: "src";
-    files: "src/*.cpp";
-    include: "src";
+    files: "$path/**.cpp";
+    include: "$path";
+    // include: "D:/Dev/C++/LIB/imgui";
+}
+
+module "ImGUI" {
+    path: "D:/Dev/C++/LIB/imgui";
+    include: "$path";
+    files: "$path/*.cpp";
+    files: "$path/backends/imgui_impl_opengl3.cpp";
 }
 
 module "Main" {
-    // files: "examples/sample.cpp";
-    files: "examples/renderer.cpp";
+    files: "examples/sample.cpp";
+    // files: "examples/imgui.cpp";
     output: "test.exe";
 
     submodule: "Mova";
-    flags: "-O3 -lgdi32 -lopengl32";
+    // submodule: "ImGUI";
+    flags: "-O3 -lgdi32 -lopengl32 -D WIN32_LEAN_AND_MEAN";
 }

@@ -122,7 +122,7 @@ uint32_t _textHeight(std::string text) { return context->context.call<val>("meas
 uint32_t _getViewportWidth() { return context->canvas["width"].as<uint32_t>(); }
 uint32_t _getViewportHeight() { return context->canvas["height"].as<uint32_t>(); }
 
-MVAPI void setContext(const Window& window) {
+void setContext(const Window& window) {
   context = window.data.get();
   if (context->renderer) {
     contextType = ContextType::RENDERER;
@@ -146,11 +146,11 @@ void _nextFrame() {
   emscripten_sleep(0);
 }
 
-MVAPI int getMouseX() { return context->mouseX; }
-MVAPI int getMouseY() { return context->mouseY; }
+int getMouseX() { return context->mouseX; }
+int getMouseY() { return context->mouseY; }
 
-MVAPI void copyToClipboard(std::string_view s) { val::global("navigator")["clipboard"].call<void>("writeText", val(s.data())); }
-MVAPI void copyToClipboard(Image& image) {
+void copyToClipboard(std::string_view s) { val::global("navigator")["clipboard"].call<void>("writeText", val(s.data())); }
+void copyToClipboard(Image& image) {
   // val::global("navigator")["clipboard"].call<void>("write", val(s.data()));
 }
 
@@ -162,14 +162,14 @@ EM_ASYNC_JS(char*, _mova_readClipboardText, (), {
   return stringOnWasmHeap;
 });
 
-MVAPI std::string getClipboardContent() {
+std::string getClipboardContent() {
   char* text = _mova_readClipboardText();
   std::string str = std::string(text);
   free(text);
   return str;
 }
 
-MVAPI void sleep(uint32_t ms) { emscripten_sleep(ms); }
+void sleep(uint32_t ms) { emscripten_sleep(ms); }
 
 /* --------------- Structs --------------- */
 Window::Window(std::string_view title, RendererConstructor createRenderer) : data(new WindowData()), opened(true) {
@@ -383,8 +383,8 @@ std::map<std::string, Key> keyMap = {
   {"NumpadDecimal", Key::NumpadDecimal}, {"NumpadDivide", Key::NumpadDivide}, {"NumpadMultiply", Key::NumpadMultiply},
   {"NumpadSubtract", Key::NumpadSubtract}, {"NumpadAdd", Key::NumpadAdd},
   {"NumpadEnter", Key::NumpadEnter}, {"NumpadEqual", Key::NumpadEqual},
-  {"ShiftLeft", Key::ShiftLeft}, {"ControlLeft", Key::ControlLeft}, {"AltLeft", Key::AltLeft}, {"MetaLeft", Key::MetaLeft},
-  {"ShiftRight", Key::ShiftRight}, {"ControlRight", Key::ControlRight}, {"AltRight", Key::AltRight}, {"MetaRight", Key::MetaRight},
+  {"ShiftLeft", Key::ShiftLeft}, {"CtrlLeft", Key::CtrlLeft}, {"AltLeft", Key::AltLeft}, {"MetaLeft", Key::MetaLeft},
+  {"ShiftRight", Key::ShiftRight}, {"CtrlRight", Key::CtrlRight}, {"AltRight", Key::AltRight}, {"MetaRight", Key::MetaRight},
   {"ContextMenu", Key::ContextMenu},
   {"Digit0", Key::Digit0}, {"Digit1", Key::Digit1}, {"Digit2", Key::Digit2}, {"Digit3", Key::Digit3}, {"Digit4", Key::Digit4},
   {"Digit5", Key::Digit5}, {"Digit6", Key::Digit6}, {"Digit7", Key::Digit7}, {"Digit8", Key::Digit8}, {"Digit9", Key::Digit9},
@@ -409,8 +409,8 @@ std::map<Cursor, std::string> cursorMap = {
 };
 // clang-format on
 
-MVAPI void setCursor(Cursor cursor) { context->canvas["style"].set("cursor", cursorMap[cursor]); }
-MVAPI void setCursor(Image cursor, int x, int y) {
+void setCursor(Cursor cursor) { context->canvas["style"].set("cursor", cursorMap[cursor]); }
+void setCursor(Image cursor, int x, int y) {
   if (cursor.data->changed) {
     loadImage(&cursor);
     cursor.data->changed = false;
@@ -419,7 +419,7 @@ MVAPI void setCursor(Image cursor, int x, int y) {
   else context->canvas["style"].set("cursor", "url(" + cursor.data->dataURL.as<std::string>() + "), auto");
 }
 
-MVAPI void pointerLock(bool state) {
+void pointerLock(bool state) {
   EmscriptenPointerlockChangeEvent e;
   emscripten_get_pointerlock_status(&e);
   if (!e.isActive && state) emscripten_request_pointerlock("#canvas", true);

@@ -8,13 +8,16 @@
 
 namespace Mova {
 template <typename K, typename V> static V getOrDefault(const std::map<K, V>& m, const K& key, const V& def);
-static void loadImage(Image* img);
 
 // Callbacks!!!
 
 void _mouseCallback(Window* window, int mouseX, int mouseY, int deltaX, int deltaY, uint8_t buttons);
 void _mouseScrollCallback(float deltaX, float deltaY);
 void _keyCallback(Key key, char ch, bool state, bool repeat);
+
+enum ImageBits : uint8_t {
+  IMAGE_TEXTURE_BIT,
+};
 
 /* --------------- Data struct --------------- */
 static WindowData* context;
@@ -27,9 +30,13 @@ struct WindowData {
 };
 
 struct ImageData {
-  Texture texture;
-  bool antialiasing, immContent = false, changed = false, tchanged = false;
+  Image* parent;
+  bool antialiasing, immContent = false;
+  uint8_t changed;
   char* content;
+
+  Texture asTexture(bool mutible, bool tiling);
+
   ~ImageData();
 };
 
@@ -49,12 +56,7 @@ void _drawRect(int x, int y, int w, int h, Color color, int thickness) {}
 void _fillRect(int x, int y, int w, int h, Color color) {}
 void _roundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4) {}
 void _fillRoundRect(int x, int y, int w, int h, Color color, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4) {}
-void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
-  if (image.data->changed) {
-    loadImage(&image);
-    image.data->changed = false;
-  }
-}
+void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {}
 
 void _drawText(int x, int y, std::string text, Color color) {}
 
@@ -108,7 +110,8 @@ Image::Image(std::string_view filename, bool antialiasing) : data(new ImageData(
   data->antialiasing = antialiasing;
   int n;
   data->content = (char*)stbi_load(filename.data(), &width, &height, &n, 4);
-  data->changed = data->tchanged = true;
+  data->changed = 0xff;
+  data->parent = this;
 }
 
 Image::Image(int width, int height, const char* content, bool antialiasing) : data(new ImageData()), width(width), height(height) {
@@ -126,7 +129,20 @@ Image::Image(int width, int height, const char* content, bool antialiasing) : da
   } else {
     data->content = (char*)content;
   }
-  data->changed = data->tchanged = true;
+  data->changed = 0xff;
+  data->parent = this;
+}
+
+ImageData::asTexture(bool mutible, bool tiling) {
+  static Texture texture;
+  if (!texture) {
+    texture = renderer->createTexture(parent->width, parent->height, content, antialiasing, mutible, tiling);
+    changed &= ~IMAGE_TEXTURE_BIT;
+  }
+  if (changed & IMAGE_TEXTURE_BIT) {
+    renderer->modifyTexture(texture, parent->width, parent->height, content, antialiasing, mutible, tiling);
+    changed &= ~IMAGE_TEXTURE_BIT;
+  }
 }
 
 ImageData::~ImageData() {
@@ -136,20 +152,12 @@ ImageData::~ImageData() {
 }
 
 Texture Image::asTexture(bool mutible, bool tiling) {
-  if (!data->texture) {
-    data->texture = renderer->createTexture(width, height, data->content, data->antialiasing, mutible, tiling);
-    data->tchanged = false;
-  }
-  if (data->tchanged) {
-    renderer->modifyTexture(data->texture, width, height, data->content, data->antialiasing, mutible, tiling);
-    data->tchanged = false;
-  }
-  return data->texture;
+  return data->asTexture(mutible, tiling);
 }
 
 void Image::setPixel(int x, int y, Color color) {
   ((uint32_t*)data->content)[x + y * width] = color.value;
-  data->changed = data->tchanged = true;
+  data->changed = 0xff;
 }
 
 Color Image::getPixel(int x, int y) { return Color(((uint32_t*)data->content)[x + y * width]); }
@@ -167,8 +175,6 @@ AudioData::~AudioData() {}
 
 Font::Font(std::string filename) : data(new FontData()) {}
 FontData::~FontData() {}
-
-static void loadImage(Image* img) {}
 
 template <typename K, typename V> static V getOrDefault(const std::map<K, V>& m, const K& key, const V& def) {
   typename std::map<K, V>::const_iterator it = m.find(key);
@@ -195,8 +201,8 @@ std::map<std::string, Key> keyMap = {
   {"NumpadDecimal", Key::NumpadDecimal}, {"NumpadDivide", Key::NumpadDivide}, {"NumpadMultiply", Key::NumpadMultiply},
   {"NumpadSubtract", Key::NumpadSubtract}, {"NumpadAdd", Key::NumpadAdd},
   {"NumpadEnter", Key::NumpadEnter}, {"NumpadEqual", Key::NumpadEqual},
-  {"ShiftLeft", Key::ShiftLeft}, {"ControlLeft", Key::ControlLeft}, {"AltLeft", Key::AltLeft}, {"MetaLeft", Key::MetaLeft},
-  {"ShiftRight", Key::ShiftRight}, {"ControlRight", Key::ControlRight}, {"AltRight", Key::AltRight}, {"MetaRight", Key::MetaRight},
+  {"ShiftLeft", Key::ShiftLeft}, {"CtrlLeft", Key::CtrlLeft}, {"AltLeft", Key::AltLeft}, {"MetaLeft", Key::MetaLeft},
+  {"ShiftRight", Key::ShiftRight}, {"CtrlRight", Key::CtrlRight}, {"AltRight", Key::AltRight}, {"MetaRight", Key::MetaRight},
   {"ContextMenu", Key::ContextMenu},
   {"Digit0", Key::Digit0}, {"Digit1", Key::Digit1}, {"Digit2", Key::Digit2}, {"Digit3", Key::Digit3}, {"Digit4", Key::Digit4},
   {"Digit5", Key::Digit5}, {"Digit6", Key::Digit6}, {"Digit7", Key::Digit7}, {"Digit8", Key::Digit8}, {"Digit9", Key::Digit9},
@@ -222,12 +228,7 @@ std::map<Cursor, std::string> cursorMap = {
 // clang-format on
 
 void setCursor(Cursor cursor) {}
-void setCursor(Image cursor, int x, int y) {
-  if (cursor.data->changed) {
-    loadImage(&cursor);
-    cursor.data->changed = false;
-  }
-}
+void setCursor(Image cursor, int x, int y) {}
 
 void pointerLock(bool state) {}
 
