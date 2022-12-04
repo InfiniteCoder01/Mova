@@ -1,5 +1,5 @@
 platform "Windows" {
-    command: "g++ $files -o $out -I*$include";
+    command: "g++ $files -o $out -I*$include -D _DEBUG";
     submoduleCommand: "*g++ -c $files -o $out -I*$include -D _DEBUG";
 }
 

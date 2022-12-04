@@ -6,4 +6,5 @@
 void ImGuiImplMova_Init();
 void ImGuiImplMova_NewFrame();
 void ImGuiImplMova_Render();
+void ImGuiImplMova_Shutdown();
 #endif

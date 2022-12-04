@@ -37,7 +37,14 @@ static Texture _createTexture(uint32_t width, uint32_t height, unsigned char* da
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, antialiasing ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, antialiasing ? GL_LINEAR : GL_NEAREST);
   glGenerateMipmap(GL_TEXTURE_2D);
+  glBindTexture(GL_TEXTURE_2D, 0);
   return std::shared_ptr<unsigned int>(new unsigned int(texture), _destroyTexture);
+}
+
+static void _modifyTexture(Texture texture, uint32_t width, uint32_t height, unsigned char* data) {
+  glBindTexture(GL_TEXTURE_2D, *texture);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
+  glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 static unsigned int compileSingleShader(const char* code, unsigned int type) {
@@ -173,6 +180,7 @@ Renderer* OpenGL() {
   LoadGLExtensions();
   return new Renderer{
       .createTexture = _createTexture,
+      .modifyTexture = _modifyTexture,
       .compileShader = _compileShader,
       .useShader = _useShader,
       .defaultShader = _defaultShader,

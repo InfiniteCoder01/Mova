@@ -4,8 +4,12 @@ namespace Mova {
 unsigned char* _bitmapBuffer;
 uint32_t _bitmapWidth, _bitmapHeight;
 uint32_t (*_bitmapColorToValue)(Color color);
+void (*_bitmapOnChange)(void) = nullptr;
 inline uint32_t* getBitmap() { return (uint32_t*)_bitmapBuffer; }
-inline void setPixel(int x, int y, uint32_t value) { getBitmap()[x + y * _bitmapWidth] = value; }
+inline void setPixel(int x, int y, uint32_t value) {
+  getBitmap()[x + y * _bitmapWidth] = value;
+  if (_bitmapOnChange) _bitmapOnChange();
+}
 
 static void _drawImage(Image& image, int x, int y, int w, int h, Flip flip, int srcX, int srcY, int srcW, int srcH) {
   for (int i = 0; i < w; i++) {

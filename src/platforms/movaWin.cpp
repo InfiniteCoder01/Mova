@@ -141,22 +141,24 @@ void WindowData::updateScreen() {
 
 /******** Image ********/
 struct ImageData {
-  bool antialiasing;
+  Image* parent;
+
+  inline ~ImageData() {
+    if (parent->contentType == Image::ImageContentType::FILE) stbi_image_free(parent->content);
+    else if (parent->contentType == Image::ImageContentType::CREATE) delete[] parent->content;
+  }
 };
 
-Image::Image(std::string_view filename, bool antialiasing) : data(new ImageData()), antialiasing(antialiasing) {
+Image::Image(bool antialiasing) : data(new ImageData{.parent = this}), antialiasing(antialiasing) {}
+
+Image::Image(std::string_view filename, bool antialiasing) : Image(antialiasing) {
   int n;
   MV_ASSERT(content = stbi_load(filename.data(), &width, &height, &n, 4), "Failed to load an image!");
-  data->antialiasing = antialiasing;
-}
-
-Image::~Image() {
-  stbi_image_free(content);
-  delete data;
 }
 
 /******** API ********/
 void setContext(Window& window) {
+  _resetContext();
   context = window.data;
   if (context->renderer) {
     wglMakeCurrent(context->hDC, context->hRC);
@@ -172,12 +174,14 @@ void setContext(Window& window) {
 }
 
 uint32_t viewportWidth() {
+  if(_viewportWidth()) return _viewportWidth();
   RECT rect;
   GetClientRect(context->hWnd, &rect);
   return rect.right - rect.left;
 }
 
 uint32_t viewportHeight() {
+  if(_viewportHeight()) return _viewportHeight();
   RECT rect;
   GetClientRect(context->hWnd, &rect);
   return rect.bottom - rect.top;
@@ -198,6 +202,8 @@ void nextFrame() {
       SwapBuffers(window->data->hDC);
     } else {
       window->data->updateScreen();
+      _bitmapWidth = viewportWidth();
+      _bitmapHeight = viewportHeight();
     }
   }
   MSG msg;

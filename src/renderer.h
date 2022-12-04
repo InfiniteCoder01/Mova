@@ -62,6 +62,7 @@ struct Renderer {
   uint32_t (*viewportHeight)();
 
   Texture (*createTexture)(uint32_t width, uint32_t height, unsigned char* data, bool transperency, bool antialiasing);
+  void (*modifyTexture)(Texture texture, uint32_t width, uint32_t height, unsigned char* data);
   Shader (*compileShader)(std::string_view vertex, std::string_view fragment);
   void (*useShader)(Shader shader);
   void (*defaultShader)();
@@ -94,6 +95,7 @@ struct Renderer {
 extern Renderer* g_Renderer;
 
 inline Texture createTexture(uint32_t width, uint32_t height, unsigned char* data = nullptr, bool transperency = false, bool antialiasing = false) { return g_Renderer->createTexture(width, height, data, transperency, antialiasing); }
+inline void modifyTexture(Texture texture, uint32_t width, uint32_t height, unsigned char* data) { g_Renderer->modifyTexture(texture, width, height, data); }
 inline void compileShader(std::string_view vertex, std::string_view fragment) { g_Renderer->compileShader(vertex, fragment); }
 inline void useShader(Shader shader) { g_Renderer->useShader(shader); }
 inline void defaultShader() { g_Renderer->defaultShader(); }

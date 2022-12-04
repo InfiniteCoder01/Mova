@@ -1,6 +1,7 @@
 #pragma once
 #include <platform.h>
 #include <lib/logassert.h>
+#include <lib/OreonMath.hpp>
 #include <map>
 #include <memory>
 #include <string_view>
@@ -87,6 +88,7 @@ struct MouseButtonState {
 
 struct WindowData;
 struct Window {
+  Window() = default;
   Window(std::string_view title, Renderer* (*renderer)() = nullptr);
   ~Window();
   void setTitle(std::string_view title);
@@ -98,22 +100,32 @@ struct Window {
 
 struct ImageData;
 struct Image {
-  Image(uint32_t width, uint32_t height, unsigned char* data = nullptr);
+  Image() = default;
   Image(std::string_view filename, bool antialiasing = true);
-  ~Image();
+  Image(uint32_t width, uint32_t height, unsigned char* data = nullptr, bool antialiasing = true);
+
+  inline Image(VectorMath::vec2i size, unsigned char* data = nullptr, bool antialiasing = true) : Image(size.x, size.y, data, antialiasing) {}
 
   void setPixel(int x, int y, Color value);
   Color getPixel(int x, int y);
   Texture asTexture(bool transperency = false);
 
+  inline VectorMath::vec2i size() { return VectorMath::vec2i(width, height); }
+  inline void setPixel(VectorMath::vec2i pos, Color value) { setPixel(pos.x, pos.y, value); }
+  inline Color getPixel(VectorMath::vec2i pos) { return getPixel(pos.x, pos.y); }
+
   // Props
   int width, height;
-  unsigned char* content;
-  ImageData* data;
+  uint16_t changed = 0xffff;
+  unsigned char* content = nullptr;
+  enum class ImageContentType { FILE, USER, CREATE } contentType = ImageContentType::FILE;
+  std::shared_ptr<ImageData> data = nullptr;
 
  private:
+  Image(bool antialiasing);
+
   bool antialiasing;
-  Texture texture;
+  Texture texture = nullptr;
 };
 
 struct Draw {
@@ -123,18 +135,29 @@ struct Draw {
 };
 
 // API
+void setContext(Image& image);
 void setContext(Window& window);
 int mouseX();
 int mouseY();
+int mouseDeltaX();
+int mouseDeltaY();
 uint32_t viewportWidth();
 uint32_t viewportHeight();
+void setCursor(Cursor cursor);
 void nextFrame();
 
-MouseButtonState getMouseButtonState(MouseButton button);
 KeyState getKeyState(Key key);
-float getScrollX();
-float getScrollY();
+bool isMouseButtonPressed(MouseButton button);
+bool isMouseButtonReleased(MouseButton button);
+bool isMouseButtonHeld(MouseButton button);
+float scrollX();
+float scrollY();
 float deltaTime();
+
+inline VectorMath::vec2i getMousePos() { return VectorMath::vec2i(mouseX(), mouseY()); }
+inline VectorMath::vec2i getMouseDelta() { return VectorMath::vec2i(mouseDeltaX(), mouseDeltaY()); }
+inline VectorMath::vec2i viewportSize() { return VectorMath::vec2i(viewportWidth(), viewportHeight()); }
+inline VectorMath::vec2f getScroll() { return VectorMath::vec2f(scrollX(), scrollY()); }
 
 // Draw
 extern Draw* g_Draw;
@@ -148,6 +171,9 @@ inline void drawImage(Image& image, int x, int y, int w = -1, int h = -1, Flip f
   g_Draw->drawImage(image, x, y, w, h, flip, srcX, srcY, srcW, srcH);
 }
 
+inline void fillRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); };
+inline void drawImage(Image& image, VectorMath::vec2i pos, VectorMath::vec2i size = -1, Flip flip = FLIP_NONE, VectorMath::vec2i srcPos = 0, VectorMath::vec2i srcSize = -1) { drawImage(image, pos.x, pos.y, size.x, size.y, flip, srcPos.x, srcPos.y, srcSize.x, srcSize.y); };
+
 // Callbacks
 void addKeyCallback(void (*callback)(Key key, KeyState state, wchar_t character));
 void addMouseCallback(void (*callback)(Window* window, int x, int y, MouseButton button, MouseButtonState state));
@@ -156,6 +182,9 @@ void removeKeyCallback(void (*callback)(Key key, KeyState state, wchar_t charact
 void removeMouseCallback(void (*callback)(Window* window, int x, int y, MouseButton button, MouseButtonState state));
 void removeScrollCallback(void (*callback)(float deltaX, float deltaY));
 
+void _resetContext();
+uint32_t _viewportWidth();
+uint32_t _viewportHeight();
 void _nextFrame();
 void _keyCallback(Key key, bool state, bool repeat, wchar_t character);
 void _mouseCallback(Window* window, int x, int y, uint8_t buttons);

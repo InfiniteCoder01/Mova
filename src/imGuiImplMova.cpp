@@ -33,6 +33,30 @@ static const std::map<MvKey, ImGuiKey> keymap = {
 };
 // clang-format on
 
+static void keyCallback(MvKey key, Mova::KeyState state, wchar_t character) {
+  ImGuiIO& io = ImGui::GetIO();
+  if (character) io.AddInputCharacter(character);
+  if (state.repeated) return;
+  io.AddKeyEvent(getOrDefault(keymap, key, (ImGuiKey)ImGuiKey_None), state.held);
+  if (key == MvKey::CtrlLeft || key == MvKey::CtrlRight) io.AddKeyEvent(ImGuiKey_ModCtrl, state.held);
+  if (key == MvKey::ShiftLeft || key == MvKey::ShiftRight) io.AddKeyEvent(ImGuiKey_ModShift, state.held);
+  if (key == MvKey::AltLeft || key == MvKey::AltRight) io.AddKeyEvent(ImGuiKey_ModAlt, state.held);
+  if (key == MvKey::MetaLeft || key == MvKey::MetaRight) io.AddKeyEvent(ImGuiKey_ModSuper, state.held);
+}
+
+static void mouseCallback(MvWindow* window, int x, int y, Mova::MouseButton button, Mova::MouseButtonState state) {
+  ImGuiIO& io = ImGui::GetIO();
+  io.AddMousePosEvent(x, y);
+  if (button & MOUSE_LEFT) io.AddMouseButtonEvent(ImGuiMouseButton_Left, state.held);
+  else if (button & MOUSE_MIDDLE) io.AddMouseButtonEvent(ImGuiMouseButton_Middle, state.held);
+  else if (button & MOUSE_RIGHT) io.AddMouseButtonEvent(ImGuiMouseButton_Right, state.held);
+}
+
+static void scrollCallback(float deltaX, float deltaY) {
+  ImGuiIO& io = ImGui::GetIO();
+  io.AddMouseWheelEvent(deltaX, deltaY);
+}
+
 void ImGuiImplMova_Init() {
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
@@ -43,27 +67,9 @@ void ImGuiImplMova_Init() {
   io.BackendPlatformName = "imgui_impl_gui";
 
   ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-  Mova::addKeyCallback([](MvKey key, Mova::KeyState state, wchar_t character) {
-    ImGuiIO& io = ImGui::GetIO();
-    if (character) io.AddInputCharacter(character);
-    if (state.repeated) return;
-    io.AddKeyEvent(getOrDefault(keymap, key, (ImGuiKey)ImGuiKey_None), state.held);
-    if (key == MvKey::CtrlLeft || key == MvKey::CtrlRight) io.AddKeyEvent(ImGuiKey_ModCtrl, state.held);
-    if (key == MvKey::ShiftLeft || key == MvKey::ShiftRight) io.AddKeyEvent(ImGuiKey_ModShift, state.held);
-    if (key == MvKey::AltLeft || key == MvKey::AltRight) io.AddKeyEvent(ImGuiKey_ModAlt, state.held);
-    if (key == MvKey::MetaLeft || key == MvKey::MetaRight) io.AddKeyEvent(ImGuiKey_ModSuper, state.held);
-  });
-  Mova::addMouseCallback([](MvWindow* window, int x, int y, Mova::MouseButton button, Mova::MouseButtonState state) {
-    ImGuiIO& io = ImGui::GetIO();
-    io.AddMousePosEvent(x, y);
-    if (button & MOUSE_LEFT) io.AddMouseButtonEvent(ImGuiMouseButton_Left, state.held);
-    else if (button & MOUSE_MIDDLE) io.AddMouseButtonEvent(ImGuiMouseButton_Middle, state.held);
-    else if (button & MOUSE_RIGHT) io.AddMouseButtonEvent(ImGuiMouseButton_Right, state.held);
-  });
-  Mova::addScrollCallback([](float deltaX, float deltaY) {
-    ImGuiIO& io = ImGui::GetIO();
-    io.AddMouseWheelEvent(deltaX, deltaY);
-  });
+  Mova::addKeyCallback(keyCallback);
+  Mova::addMouseCallback(mouseCallback);
+  Mova::addScrollCallback(scrollCallback);
 }
 
 void ImGuiImplMova_NewFrame() {
@@ -77,5 +83,13 @@ void ImGuiImplMova_NewFrame() {
 void ImGuiImplMova_Render() {
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void ImGuiImplMova_Shutdown() {
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui::DestroyContext();
+  Mova::removeKeyCallback(keyCallback);
+  Mova::removeMouseCallback(mouseCallback);
+  Mova::removeScrollCallback(scrollCallback);
 }
 #endif
