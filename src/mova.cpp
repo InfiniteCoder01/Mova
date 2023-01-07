@@ -1,34 +1,105 @@
 #include "mova.h"
-#include <features/bitmapDraw.hpp>
-#include <renderer.h>
-#include <algorithm>
-#include <chrono>
-#include <vector>
+#define STB_IMAGE_IMPLEMENTATION
+#include <lib/logassert.h>
+#include <lib/stb_image.h>
+#include <lib/OreonMath.hpp>
 
 namespace Mova {
-Draw* g_Draw;
-static Image* g_Context = nullptr;
-static std::vector<void (*)(Key key, KeyState state, wchar_t character)> keyCallbacks;
-static std::vector<void (*)(Window* window, int x, int y, MouseButton button, MouseButtonState state)> mouseCallbacks;
-static std::vector<void (*)(float deltaX, float deltaY)> scrollCallbacks;
-static std::map<Key, KeyState> keys;
-static uint8_t g_MousePressed;
-static uint8_t g_MouseReleased;
-static uint8_t g_MouseHeld;
-static uint32_t g_MouseDeltaX, g_MouseDeltaY;
-static float g_DeltaTime, g_ScrollX, g_ScrollY;
+static VectorMath::vec2i mousePos = -1, mouseDelta = -1;
+static uint8_t mouseButtonsPressed, mouseButtonsReleased, mouseButtonsHeld;
+static uint8_t keystates[(uint32_t)Key::Unknown];
+static wchar_t charPressed;
+enum class KeyState : uint8_t { HELD = 1, PRESSED = 2, RELEASED = 4 };
 
-Color Color::hsv(uint16_t h, uint8_t s, uint8_t v) {
-  uint8_t m = v * 255 * (100 - s) / 10000;
-  uint8_t x = s * v * (60 - abs(h % 120 - 60)) * 255 / 10000 / 60 + m;
-  uint8_t y = s * v * 255 / 10000 + m;
-  if (h >= 0 && h < 60) return Color(y, x, m);
-  else if (h >= 60 && h < 120) return Color(x, y, m);
-  else if (h >= 120 && h < 180) return Color(m, y, x);
-  else if (h >= 180 && h < 240) return Color(m, x, y);
-  else if (h >= 240 && h < 300) return Color(x, m, y);
-  else return Color(y, m, x);
+/*          API CALLBACKS          */
+void _nextFrame();
+void _mouseEvent(VectorMath::vec2i newMousePos, uint8_t newButtonsState) {
+  mouseDelta = mousePos < 0 ? 0 : newMousePos - mousePos;
+  mousePos = newMousePos;
+  mouseButtonsPressed = ~mouseButtonsHeld & newButtonsState;
+  mouseButtonsReleased = mouseButtonsHeld & ~newButtonsState;
+  mouseButtonsHeld = newButtonsState;
 }
+
+void _keyEvent(Key key, bool state, wchar_t character) {
+  charPressed = character;
+  if (key == Key::ShiftLeft || key == Key::ShiftRight) _keyEvent(Key::Shift, state, character);
+  if (key == Key::CtrlLeft || key == Key::CtrlRight) _keyEvent(Key::Ctrl, state, character);
+  if (key == Key::AltLeft || key == Key::AltRight) _keyEvent(Key::Alt, state, character);
+  if (key == Key::MetaLeft || key == Key::MetaRight) _keyEvent(Key::Meta, state, character);
+  if (key >= Key::Unknown) return;
+
+  bool lastState = keystates[(uint32_t)key] & (uint8_t)KeyState::HELD;
+  keystates[(uint32_t)key] = state ? (uint8_t)KeyState::HELD : 0;
+  if (!lastState && state) keystates[(uint32_t)key] |= (uint8_t)KeyState::PRESSED;
+  if (lastState && !state) keystates[(uint32_t)key] |= (uint8_t)KeyState::RELEASED;
+}
+
+/*          FUNCTIONS          */
+VectorMath::vec2i getMousePos() { return mousePos < 0 ? 0 : mousePos; }
+VectorMath::vec2i getMouseDelta() { return mouseDelta < 0 ? 0 : mouseDelta; }
+bool isMouseButtonPressed(MouseButton button) { return mouseButtonsPressed & button; }
+bool isMouseButtonReleased(MouseButton button) { return mouseButtonsReleased & button; }
+bool isMouseButtonHeld(MouseButton button) { return mouseButtonsHeld & button; }
+bool isKeyPressed(Key key) { return keystates[(uint32_t)key] & (uint8_t)KeyState::PRESSED; }
+bool isKeyReleased(Key key) { return keystates[(uint32_t)key] & (uint8_t)KeyState::RELEASED; }
+bool isKeyHeld(Key key) { return keystates[(uint32_t)key] & (uint8_t)KeyState::HELD; }
+wchar_t getCharPressed() { return charPressed; }
+void nextFrame() {
+  mouseButtonsPressed = mouseButtonsReleased = 0;
+  for (auto& keystate : keystates) keystate &= (uint8_t)KeyState::HELD;
+  charPressed = '\0';
+  _nextFrame();
+}
+
+/*          CLASS METHODS & FUNCTIONS          */
+void DrawTarget::setCanvasSize(uint32_t width, uint32_t height) {
+  if (this->width != width || this->height != height || !bitmap) {
+    if (bitmap) delete[] bitmap;
+    bitmap = new uint32_t[width * height];
+    this->width = width;
+    this->height = height;
+  }
+}
+
+void DrawTarget::clear(Color color) { fillRect(0, 0, width, height, color); }
+
+void DrawTarget::fillRect(int x, int y, int width, int height, Color color) {
+  if (x < 0) width += x, x = 0;
+  if (y < 0) height += y, y = 0;
+  if (x + width >= this->width) width = this->width - x;
+  if (y + height >= this->height) height = this->height - y;
+  for (int x1 = x; x1 < x + width; x1++) {
+    for (int y1 = y; y1 < y + height; y1++) {
+      setPixel(x1, y1, color);
+    }
+  }
+}
+
+void DrawTarget::drawImage(const Image& image, int x, int y, int width, int height, int srcX, int srcY, int srcW, int srcH) {
+  if (srcW == 0) srcW = image.width;
+  if (srcH == 0) srcH = image.height;
+  if (width == 0) width = srcW;
+  if (height == 0) height = srcH;
+  for (int x1 = Math::max(x, 0); x1 < Math::min(x + abs(width), this->width); x1++) {
+    for (int y1 = Math::max(y, 0); y1 < Math::min(y + abs(height), this->height); y1++) {
+      int u = (x1 - x) * srcW / abs(width), v = (y1 - y) * srcH / abs(height);
+      if (width < 0) u = srcW - u - 1;
+      if (height < 0) v = srcH - v - 1;
+      Color pixel = image.getPixel(u + srcX, v + srcY);
+      if (pixel.a > 128) setPixel(x1, y1, pixel);
+    }
+  }
+}
+
+Image::Image(std::string_view filename) {
+  int n, width, height;
+  bitmap = (uint32_t*)stbi_load(filename.data(), &width, &height, &n, 4);
+  MV_ASSERT(bitmap, "Failed to load an image!");
+  this->width = width, this->height = height;
+}
+
+Image::~Image() { stbi_image_free(bitmap); }
 
 constexpr Color Color::black = Color(0, 0, 0);
 constexpr Color Color::white = Color(255, 255, 255);
@@ -38,101 +109,4 @@ constexpr Color Color::alpha = Color(0, 0, 0, 0);
 constexpr Color Color::red = Color(255, 0, 0);
 constexpr Color Color::green = Color(0, 255, 0);
 constexpr Color Color::blue = Color(0, 0, 255);
-
-Image::Image(uint32_t width, uint32_t height, unsigned char* data, bool antialiasing) : Image(antialiasing) {
-  this->width = width, this->height = height;
-  contentType = data ? ImageContentType::USER : ImageContentType::CREATE;
-  if (!data) {
-    data = new unsigned char[width * height * 4];
-    for (int i = 0; i < width * height; i++) ((uint32_t*)data)[i] = Color::black.value;
-  }
-  content = data;
-}
-
-void Image::setPixel(int x, int y, Color value) { ((uint32_t*)content)[x + y * width] = value.value, changed = 0xffff; }
-Color Image::getPixel(int x, int y) { return Color(((uint32_t*)content)[x + y * width]); }
-Texture Image::asTexture(bool transperency) {
-  if (!texture) texture = createTexture(width, height, content, transperency, antialiasing);
-  else if (changed & (1 << 15)) modifyTexture(texture, width, height, content);
-  changed &= ~(1 << 15);
-  return texture;
-}
-
-void setContext(MvImage& image) {
-  g_Context = &image;
-  _bitmapBuffer = image.content;
-  _bitmapWidth = image.width;
-  _bitmapHeight = image.height;
-  _bitmapColorToValue = _bitmapColorToValueColorRGBA;
-  _bitmapOnChange = []() {
-    if (g_Context) g_Context->changed = 0xffff;
-  };
-  g_Draw = getBitmapDraw();
-}
-
-void _resetContext() {
-  g_Context = nullptr;
-  _bitmapOnChange = nullptr;
-}
-
-uint32_t _viewportWidth() { return g_Context ? g_Context->width : 0; }
-uint32_t _viewportHeight() { return g_Context ? g_Context->height : 0; }
-
-void _nextFrame() {
-  static auto t = std::chrono::steady_clock::now();
-  g_DeltaTime = (std::chrono::steady_clock::now() - t).count() / 1000000000.0;
-  t = std::chrono::steady_clock::now();
-  g_MousePressed = g_MouseReleased = 0;
-  g_MouseDeltaX = g_MouseDeltaY = 0;
-  g_ScrollX = g_ScrollY = 0;
-  for (auto& key : keys) {
-    key.second.pressed = false;
-    key.second.released = false;
-    key.second.repeated = false;
-  }
-}
-
-KeyState getKeyState(Key key) { return keys[key]; }
-bool isMouseButtonPressed(MouseButton button) { return (g_MousePressed & button) != 0; }
-bool isMouseButtonReleased(MouseButton button) { return (g_MouseReleased & button) != 0; }
-bool isMouseButtonHeld(MouseButton button) { return (g_MouseHeld & button) != 0; }
-int mouseDeltaX() { return g_MouseDeltaX; }
-int mouseDeltaY() { return g_MouseDeltaY; }
-float scrollX() { return g_ScrollX; }
-float scrollY() { return g_ScrollY; }
-float deltaTime() { return g_DeltaTime <= 0 ? 1.f / 60 : g_DeltaTime; }
-
-// Callbacks
-void addKeyCallback(void (*callback)(Key key, KeyState state, wchar_t character)) { keyCallbacks.push_back(callback); }
-void addMouseCallback(void (*callback)(Window* window, int x, int y, MouseButton button, MouseButtonState state)) { mouseCallbacks.push_back(callback); }
-void addScrollCallback(void (*callback)(float deltaX, float deltaY)) { scrollCallbacks.push_back(callback); }
-void removeKeyCallback(void (*callback)(Key key, KeyState state, wchar_t character)) { keyCallbacks.erase(std::remove(keyCallbacks.begin(), keyCallbacks.end(), callback), keyCallbacks.end()); }
-void removeMouseCallback(void (*callback)(Window* window, int x, int y, MouseButton button, MouseButtonState state)) { mouseCallbacks.erase(std::remove(mouseCallbacks.begin(), mouseCallbacks.end(), callback), mouseCallbacks.end()); }
-void removeScrollCallback(void (*callback)(float deltaX, float deltaY)) { scrollCallbacks.erase(std::remove(scrollCallbacks.begin(), scrollCallbacks.end(), callback), scrollCallbacks.end()); }
-
-void _keyCallback(Key key, bool state, bool repeat, wchar_t character) {
-  keys[key].pressed = !keys[key].held && state;
-  keys[key].released = keys[key].held && state;
-  keys[key].repeated = repeat && state && !keys[key].pressed;
-  keys[key].held = state;
-  for (void (*callback)(Key key, KeyState state, wchar_t character) : keyCallbacks) callback(key, keys[key], character);
-}
-
-void _mouseCallback(Window* window, int x, int y, uint8_t buttons) {
-  static int lastX = -1, lastY = -1;
-  if (lastX < 0 || lastY < 0) lastX = x, lastY = y;
-  g_MouseDeltaX += lastX - x, g_MouseDeltaY += lastY - y;
-  lastX = x, lastY = y;
-  MouseButton button = (MouseButton)(g_MouseHeld ^ buttons);
-  g_MousePressed = ~g_MouseHeld & buttons;
-  g_MouseReleased = g_MouseHeld & ~buttons;
-  g_MouseHeld = buttons;
-  for (void (*callback)(Window * window, int x, int y, MouseButton button, MouseButtonState state) : mouseCallbacks) callback(window, x, y, button, MouseButtonState{.held = isMouseButtonHeld(button), .pressed = isMouseButtonPressed(button), .released = isMouseButtonReleased(button)});
-}
-
-void _scrollCallback(float deltaX, float deltaY) {
-  g_ScrollX += deltaX;
-  g_ScrollY += deltaY;
-  for (void (*callback)(float deltaX, float deltaY) : scrollCallbacks) callback(deltaX, deltaY);
-}
 }  // namespace Mova

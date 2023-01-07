@@ -1,27 +1,47 @@
 #include <mova.h>
-#include <renderer.h>
+#include <GL/gl.h>
+#include <lib/loadOpenGL.h>
+
+void glSample() {
+  static unsigned int VAO, VBO;
+  glClearColor(1, 0, 0, 1);
+  glClear(GL_COLOR_BUFFER_BIT);
+  if (!VAO) {
+    static const float vertices[] = {-1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  }
+  glEnableVertexAttribArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+}
 
 int main() {
-  MvImage image = MvImage("test.png", false);
-  MvWindow window = MvWindow("Mova sample", Mova::OpenGL);
-  Mova::defaultShader();
-  MvMesh mesh = MvMesh(
-      {
-          MvVertexAttribArray({-1.f, -1.f, -1.f, 1.f, 1.f, 1.f, -1.f, -1.f, 1.f, -1.f, 1.f, 1.f}, 2),
-          MvVertexAttribArray({0.f, 1.f, 0.f, 0.f, 1.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f, 0.f}, 2),
-      },
-      6);
+  MvImage image = MvImage("test.png");
+  MvWindow window = MvWindow("Mova");
   MvWindow window2 = MvWindow("Mewo");
-  while (window.isOpen && window2.isOpen) {
-    setContext(window);
-    Mova::setViewport(0, 0, Mova::viewportWidth(), Mova::viewportHeight());
-    Mova::clear(MvColor::green);
-    Mova::drawMesh(mesh, image.asTexture());
-    if (Mova::getKeyState(MvKey::A).held) Mova::fillRect(Mova::mouseX(), Mova::mouseY(), 100, 100, MvColor::red);
+  MvWindow window3 = MvWindow("OpenGL", MvRendererType::OpenGL);
+  while (window.isOpen && window2.isOpen && window3.isOpen) {
+    window.clear(MvColor::red);
+    window.fillRect(window.getMousePos(), 256, MvColor::green);
+    window.fillRect(window.size() / 2 + Mova::getMouseDelta() * 10 - 10, 20, Mova::isMouseButtonHeld(MOUSE_LEFT) ? MvColor::red : MvColor::green);
+    if (Mova::isMouseButtonPressed(MOUSE_RIGHT)) puts("Pressed");
+    if (Mova::isMouseButtonReleased(MOUSE_RIGHT)) puts("Released");
+    if (Mova::isKeyPressed(MvKey::A)) puts("A Pressed");
+    if (Mova::isKeyHeld(MvKey::Shift)) puts("Shift Held");
+    if (Mova::isKeyReleased(MvKey::Meta)) puts("Meta Released");
+    if (Mova::getCharPressed()) printf("Char: %c\n", Mova::getCharPressed());
+    glViewport(0, 0, window3.width, window3.height);
+    glSample();
 
-    setContext(window2);
-    Mova::fillRect(0, 0, 100, 100, MvColor::red);
-    Mova::drawImage(image, 100, 0, 512, 512);
+    window2.clear();
+    window2.drawImage(image, 10, 10, 256, 256);
     Mova::nextFrame();
   }
 }
