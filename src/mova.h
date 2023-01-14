@@ -1,5 +1,14 @@
+#pragma once
 #include <string>
+#include <functional>
 #include <lib/OreonMath.hpp>
+#include <platform.h>
+#if __has_include("imgui.h")
+#include <imgui.h>
+#endif
+#if __has_include("nvwa/debug_new.h") && defined(DEBUG)
+#include <nvwa/debug_new.h>
+#endif
 
 namespace Mova {
 enum MouseButton : uint8_t { MOUSE_LEFT = 1, MOUSE_MIDDLE = 2, MOUSE_RIGHT = 4, MOUSE_X1 = 8, MOUSE_X2 = 16 };
@@ -25,10 +34,18 @@ enum class Key {
 enum class RendererType { OpenGL, None };
 
 /*          FUNCTIONS          */
+float deltaTime();
 VectorMath::vec2i getMousePos();
 VectorMath::vec2i getMouseDelta();
+VectorMath::vec2i getMouseScroll();
 inline int getMouseX() { return getMousePos().x; }
 inline int getMouseY() { return getMousePos().y; }
+inline int getMouseDeltaX() { return getMouseDelta().x; }
+inline int getMouseDeltaY() { return getMouseDelta().y; }
+inline int getScrollX() { return getMouseScroll().x; }
+inline int getScrollY() { return getMouseScroll().y; }
+void setMousePos(int x, int y);
+inline void setMousePos(VectorMath::vec2i pos) { setMousePos(pos.x, pos.y); }
 bool isMouseButtonPressed(MouseButton button);
 bool isMouseButtonReleased(MouseButton button);
 bool isMouseButtonHeld(MouseButton button);
@@ -38,14 +55,23 @@ bool isKeyHeld(Key key);
 wchar_t getCharPressed();
 void nextFrame();
 
+void copyToClipboard(std::string_view text);
+
+using MouseCallback = std::function<void(int x, int y, MouseButton button, bool down)>;
+using ScrollCallback = std::function<void(float deltaX, float deltaY)>;
+using KeyCallback = std::function<void(Key key, char character, bool state, bool repeat)>;
+void addMouseCallback(MouseCallback callback);
+void addScrollCallback(ScrollCallback callback);
+void addKeyCallback(KeyCallback callback);
+
 /*          STRUCTS          */
 struct Color {
   constexpr Color() : value(0) {}
   constexpr Color(uint32_t value) : value(value) {}
   constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
-  // #if __has_include("imgui.h")
-  //   Color(ImVec4 v) : r(v.x * 255), g(v.y * 255), b(v.z * 255), a(v.w * 255) {}
-  // #endif
+#if __has_include("imgui.h")
+  Color(ImVec4 v) : r(v.x * 255), g(v.y * 255), b(v.z * 255), a(v.w * 255) {}
+#endif
 
   union {
     struct {
@@ -59,6 +85,7 @@ struct Color {
 
   static const Color black, white, gray, darkgray, alpha;
   static const Color red, green, blue;
+  static const Color magenta;
 };
 
 struct Image;
@@ -66,16 +93,22 @@ struct DrawTarget {
   uint32_t* bitmap = nullptr;
   uint32_t width = 0, height = 0;
 
+  ~DrawTarget();
+
   virtual Color getPixel(int x, int y) const { return Color(bitmap[x + y * width]); }
   virtual void setPixel(int x, int y, Color color) { bitmap[x + y * width] = color.value; }
 
   void setCanvasSize(uint32_t width, uint32_t height);
   void clear(Color color = Color::black);
   void fillRect(int x, int y, int width, int height, Color color);
+  void drawRect(int x, int y, int width, int height, Color color);
   void drawImage(const Image& image, int x, int y, int width = 0, int height = 0, int srcX = 0, int srcY = 0, int srcW = 0, int srcH = 0);
 
+  inline Color getPixel(VectorMath::vec2i pos) const { return getPixel(pos.x, pos.y); }
+  inline void setPixel(VectorMath::vec2i pos, Color color) { setPixel(pos.x, pos.y, color); }
   inline void setCanvasSize(VectorMath::vec2i size) { setCanvasSize(size.x, size.y); }
   inline void fillRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
+  inline void drawRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color) { drawRect(pos.x, pos.y, size.x, size.y, color); }
   inline void drawImage(const Image& image, VectorMath::vec2i pos, VectorMath::vec2i size = 0, VectorMath::vec2i srcPos = 0, VectorMath::vec2i srcSize = 0) { drawImage(image, pos.x, pos.y, size.x, size.y, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
   inline VectorMath::vec2i size() { return VectorMath::vec2i(width, height); }
 };
@@ -99,6 +132,8 @@ struct Window : public DrawTarget {
   inline VectorMath::vec2i getMousePos() { return Mova::getMousePos() - getPosition(); }
   inline int getMouseX() { return getMousePos().x; }
   inline int getMouseY() { return getMousePos().y; }
+  inline void setMousePos(VectorMath::vec2i pos) { Mova::setMousePos(pos + getPosition()); }
+  inline void setMousePos(int x, int y) { setMousePos(VectorMath::vec2i(x, y)); }
 
   bool isOpen;
   RendererType rendererType;
@@ -106,8 +141,25 @@ struct Window : public DrawTarget {
 
 struct Image : public DrawTarget {
   Image(std::string_view filename);
+  Image(int width, int height, char* data);
+  inline Image(VectorMath::vec2i size, char* data) : Image(size.x, size.y, data) {}
   ~Image();
+
+  virtual void setPixel(int x, int y, Color color) override;
+  unsigned int asTexture(RendererType rendererType);
+  void save(std::string_view filename);
+
+ private:
+  std::unordered_map<RendererType, unsigned int> textures;
 };
+
+/*          IMGUI          */
+#if __has_include("imgui.h")
+void ImGui_Init(Window& window);
+void ImGui_NewFrame();
+void ImGui_Render();
+void ImGui_Shutdown();
+#endif
 };  // namespace Mova
 
 using MvKey = Mova::Key;
