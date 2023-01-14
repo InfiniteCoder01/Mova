@@ -80,7 +80,10 @@ extern PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers;
 extern PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
 extern PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
 extern PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
+extern PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer;
+
 extern PFNGLACTIVETEXTUREPROC glActiveTexture;
+extern PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback;
 
 #ifdef __WIN32__
 extern PFNGLGENERATEMIPMAPPROC glGenerateMipmap;
@@ -161,7 +164,10 @@ PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers = nullptr;
 PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer = nullptr;
 PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage = nullptr;
 PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer = nullptr;
+PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer = nullptr;
+
 PFNGLACTIVETEXTUREPROC glActiveTexture = nullptr;
+PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback = nullptr;
 
 #ifdef __WINDOWS__
 PFNGLGENERATEMIPMAPPROC glGenerateMipmap = nullptr;
@@ -241,9 +247,11 @@ void LoadGLExtensions() {
   glBindRenderbuffer = (PFNGLBINDRENDERBUFFERPROC)wglGetProcAddress("glBindRenderbuffer");
   glRenderbufferStorage = (PFNGLRENDERBUFFERSTORAGEPROC)wglGetProcAddress("glRenderbufferStorage");
   glFramebufferRenderbuffer = (PFNGLFRAMEBUFFERRENDERBUFFERPROC)wglGetProcAddress("glFramebufferRenderbuffer");
+  glBlitFramebuffer = (PFNGLBLITFRAMEBUFFERPROC)wglGetProcAddress("glBlitFramebuffer");
 
   // Multitexturing GL Does Not Load 1.3+ Functionality in Windows
   glActiveTexture = (PFNGLACTIVETEXTUREPROC)wglGetProcAddress("glActiveTexture");
+  glDebugMessageCallback = (PFNGLDEBUGMESSAGECALLBACKPROC)wglGetProcAddress("glDebugMessageCallback");
   glGenerateMipmap = (PFNGLGENERATEMIPMAPPROC)wglGetProcAddress("glGenerateMipmap");
 #endif
 }

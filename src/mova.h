@@ -1,5 +1,10 @@
+#pragma once
 #include <string>
+#include <functional>
 #include <lib/OreonMath.hpp>
+#if __has_include("imgui.h")
+#include <imgui.h>
+#endif
 
 namespace Mova {
 enum MouseButton : uint8_t { MOUSE_LEFT = 1, MOUSE_MIDDLE = 2, MOUSE_RIGHT = 4, MOUSE_X1 = 8, MOUSE_X2 = 16 };
@@ -25,10 +30,18 @@ enum class Key {
 enum class RendererType { OpenGL, None };
 
 /*          FUNCTIONS          */
+float deltaTime();
 VectorMath::vec2i getMousePos();
 VectorMath::vec2i getMouseDelta();
+VectorMath::vec2i getMouseScroll();
 inline int getMouseX() { return getMousePos().x; }
 inline int getMouseY() { return getMousePos().y; }
+inline int getMouseDeltaX() { return getMouseDelta().x; }
+inline int getMouseDeltaY() { return getMouseDelta().y; }
+inline int getScrollX() { return getMouseScroll().x; }
+inline int getScrollY() { return getMouseScroll().y; }
+void setMousePos(int x, int y);
+inline void setMousePos(VectorMath::vec2i pos) { setMousePos(pos.x, pos.y); }
 bool isMouseButtonPressed(MouseButton button);
 bool isMouseButtonReleased(MouseButton button);
 bool isMouseButtonHeld(MouseButton button);
@@ -38,14 +51,23 @@ bool isKeyHeld(Key key);
 wchar_t getCharPressed();
 void nextFrame();
 
+void copyToClipboard(std::string_view text);
+
+using MouseCallback = std::function<void(int x, int y, MouseButton button, bool down)>;
+using ScrollCallback = std::function<void(float deltaX, float deltaY)>;
+using KeyCallback = std::function<void(Key key, char character, bool state, bool repeat)>;
+void addMouseCallback(MouseCallback callback);
+void addScrollCallback(ScrollCallback callback);
+void addKeyCallback(KeyCallback callback);
+
 /*          STRUCTS          */
 struct Color {
   constexpr Color() : value(0) {}
   constexpr Color(uint32_t value) : value(value) {}
   constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
-  // #if __has_include("imgui.h")
-  //   Color(ImVec4 v) : r(v.x * 255), g(v.y * 255), b(v.z * 255), a(v.w * 255) {}
-  // #endif
+#if __has_include("imgui.h")
+  Color(ImVec4 v) : r(v.x * 255), g(v.y * 255), b(v.z * 255), a(v.w * 255) {}
+#endif
 
   union {
     struct {
@@ -99,6 +121,8 @@ struct Window : public DrawTarget {
   inline VectorMath::vec2i getMousePos() { return Mova::getMousePos() - getPosition(); }
   inline int getMouseX() { return getMousePos().x; }
   inline int getMouseY() { return getMousePos().y; }
+  inline void setMousePos(VectorMath::vec2i pos) { Mova::setMousePos(pos + getPosition()); }
+  inline void setMousePos(int x, int y) { setMousePos(VectorMath::vec2i(x, y)); }
 
   bool isOpen;
   RendererType rendererType;
@@ -106,8 +130,24 @@ struct Window : public DrawTarget {
 
 struct Image : public DrawTarget {
   Image(std::string_view filename);
+  Image(int width, int height, char* data);
+  inline Image(VectorMath::vec2i size, char* data) : Image(size.x, size.y, data) {}
   ~Image();
+
+  virtual void setPixel(int x, int y, Color color) override;
+  unsigned int asTexture(RendererType rendererType);
+
+ private:
+  std::unordered_map<RendererType, unsigned int> textures;
 };
+
+/*          IMGUI          */
+#if __has_include("imgui.h")
+void ImGui_Init(Window& window);
+void ImGui_NewFrame();
+void ImGui_Render();
+void ImGui_Shutdown();
+#endif
 };  // namespace Mova
 
 using MvKey = Mova::Key;

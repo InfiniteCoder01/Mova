@@ -19,6 +19,7 @@
 
 namespace Mova {
 void _mouseEvent(VectorMath::vec2i newMousePos, uint8_t newButtonsState);
+void _scrollEvent(VectorMath::vec2f scroll);
 void _keyEvent(Key key, bool state, wchar_t character);
 
 static void updateWindowBuffer(Window *window);
@@ -28,6 +29,8 @@ static std::unordered_map<Window *, HWND> windows;
 static std::unordered_map<Window *, HGLRC> openGLWindows;
 
 /*           FUNCTIONS          */
+void setMousePos(int x, int y) { SetCursorPos(x, y); }
+
 void _nextFrame() {
   for (auto &window : windows) {
     if (window.first->rendererType == RendererType::None) {
@@ -43,11 +46,21 @@ void _nextFrame() {
     } else SwapBuffers(GetDC(window.second));
   }
   MSG msg;
-  if (GetMessage(&msg, nullptr, 0, 0)) {
+  while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
     TranslateMessage(&msg);
     DispatchMessage(&msg);
-  } else exit(0);
+  }
   for (auto &window : windows) updateWindowBuffer(window.first);
+}
+
+void copyToClipboard(std::string_view text) {
+  HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, text.length() + 1);
+  memcpy(GlobalLock(hMem), text.data(), text.length() + 1);
+  GlobalUnlock(hMem);
+  OpenClipboard(0);
+  EmptyClipboard();
+  SetClipboardData(CF_TEXT, hMem);
+  CloseClipboard();
 }
 
 /*           WINDOW          */
@@ -208,6 +221,12 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
       _keyEvent(Key::Unknown, false, (wchar_t)wParam);
       break;
     }
+    case WM_MOUSEWHEEL:
+      _scrollEvent(VectorMath::vec2i(0, GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA));
+      break;
+    case WM_MOUSEHWHEEL:
+      _scrollEvent(VectorMath::vec2i(GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA, 0));
+      break;
     default:
       return DefWindowProc(hWnd, message, wParam, lParam);
   }

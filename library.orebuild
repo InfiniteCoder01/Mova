@@ -1,6 +1,4 @@
-// library "imgui";
+library "imgui";
 files "src/**.cpp";
 watch "src/**.h src/**.hpp";
 include "src/";
-
-// files "$includePath/backends/imgui_impl_opengl3.cpp";
