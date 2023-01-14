@@ -132,6 +132,7 @@ void DrawTarget::drawImage(const Image& image, int x, int y, int width, int heig
   if (srcH == 0) srcH = image.height;
   if (width == 0) width = srcW;
   if (height == 0) height = srcH;
+  if (x + abs(width) < 0 || y + abs(height) < 0) return;
   for (int x1 = Math::max(x, 0); x1 < Math::min(x + abs(width), this->width); x1++) {
     for (int y1 = Math::max(y, 0); y1 < Math::min(y + abs(height), this->height); y1++) {
       int u = (x1 - x) * srcW / abs(width), v = (y1 - y) * srcH / abs(height);
