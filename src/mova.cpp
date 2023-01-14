@@ -4,9 +4,11 @@
 #include <unordered_map>
 
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <lib/util.hpp>
 #include <lib/logassert.h>
 #include <lib/stb_image.h>
+#include <lib/stb_image_write.h>
 #include <lib/OreonMath.hpp>
 #include <GL/gl.h>
 
@@ -187,6 +189,13 @@ unsigned int Image::asTexture(RendererType rendererType) {
     textures[rendererType] = texture;
   }
   return textures[rendererType];
+}
+
+void Image::save(std::string_view filename) {
+  if (filename.substr(filename.find_last_of(".")) == ".bmp") stbi_write_bmp(filename.data(), width, height, 4, bitmap);
+  else if (filename.substr(filename.find_last_of(".")) == ".tga") stbi_write_tga(filename.data(), width, height, 4, bitmap);
+  else if (filename.substr(filename.find_last_of(".")) == ".jpg") stbi_write_jpg(filename.data(), width, height, 4, bitmap, 100);
+  else stbi_write_png(filename.data(), width, height, 4, bitmap, width * 4);
 }
 
 constexpr Color Color::black = Color(0, 0, 0);

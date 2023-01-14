@@ -136,6 +136,7 @@ struct Image : public DrawTarget {
 
   virtual void setPixel(int x, int y, Color color) override;
   unsigned int asTexture(RendererType rendererType);
+  void save(std::string_view filename);
 
  private:
   std::unordered_map<RendererType, unsigned int> textures;
