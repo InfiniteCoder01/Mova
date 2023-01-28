@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/src",
-                "D:/Dev/C++/LIB/imgui"
+                "D:/Dev/C++/libraries/imgui"
             ],
             "defines": [
                 "_DEBUG"

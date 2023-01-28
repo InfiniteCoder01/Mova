@@ -1,0 +1,7 @@
+files "examples/sample.cpp";
+// files "examples/imgui.cpp";
+output "test.exe";
+
+library "Mova";
+library "imgui";
+flags "-O3 -lgdi32 -lopengl32 -D WIN32_LEAN_AND_MEAN";

@@ -7,8 +7,8 @@
 #define MV_WARN(...);
 #define MV_ERR(...);
 #define MV_FATALERR(...);
-#define MV_ASSERT(expr, ...);
-#define MV_WASSERT(expr, ...);
+#define MV_ASSERT(expr, ...) expr;
+#define MV_WASSERT(expr, ...) expr;
 #else
 // clang-format off
 #define MV_LOG(...) { printf("Log %s:%d: ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); }

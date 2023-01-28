@@ -1,0 +1,4 @@
+library "imgui";
+files "src/**.cpp";
+watch "src/**.h src/**.hpp";
+include "src/";
