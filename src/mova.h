@@ -96,6 +96,8 @@ struct DrawTarget {
   void fillRect(int x, int y, int width, int height, Color color);
   void drawImage(const Image& image, int x, int y, int width = 0, int height = 0, int srcX = 0, int srcY = 0, int srcW = 0, int srcH = 0);
 
+  inline Color getPixel(VectorMath::vec2i pos) const { return getPixel(pos.x, pos.y); }
+  inline void setPixel(VectorMath::vec2i pos, Color color) { setPixel(pos.x, pos.y, color); }
   inline void setCanvasSize(VectorMath::vec2i size) { setCanvasSize(size.x, size.y); }
   inline void fillRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
   inline void drawImage(const Image& image, VectorMath::vec2i pos, VectorMath::vec2i size = 0, VectorMath::vec2i srcPos = 0, VectorMath::vec2i srcSize = 0) { drawImage(image, pos.x, pos.y, size.x, size.y, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }

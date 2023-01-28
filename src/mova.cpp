@@ -161,7 +161,12 @@ Image::Image(int width, int height, char* data) {
   if (data) memcpy(bitmap, data, width * height * 4);
 }
 
-Image::~Image() { delete[] bitmap; }
+Image::~Image() {
+  for (const auto& texture : textures) {
+    if (texture.first == RendererType::OpenGL) glDeleteTextures(1, &texture.second);
+  }
+  delete[] bitmap;
+}
 
 void Image::setPixel(int x, int y, Color color) {
   for (const auto& texture : textures) {
