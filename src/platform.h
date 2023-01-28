@@ -1,10 +1,11 @@
 #pragma once
 
-// #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) || defined(WIN64) || defined(_WIN64) || defined(__WIN64) && !defined(__CYGWIN__)
-#if defined(_DEBUG)
-#define DEBUG
-#endif
+// #if !defined(NDEBUG) && !defined(DEBUG)
+// #define DEBUG
+// #endif
 
 #if defined(_WIN32) || defined(_WIN64)
 #define __WINDOWS__
+#elif defined(__linux__)
+#define __LINUX__
 #endif

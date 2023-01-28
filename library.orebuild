@@ -1,0 +1,19 @@
+files "src/**.cpp";
+watch "src/**.h src/**.hpp";
+include "src/";
+flags "-std=c++17";
+
+// For debug
+flags "-DDEBUG -fsanitize=leak -g3";
+
+// For GCC
+linkerFlags "-Ofast -lX11 -lXrandr -lGL";
+library "imgui";
+
+// For MinGW
+// linkerFlags "-O3 -lgdi32 -lopengl32 -DWIN32_LEAN_AND_MEAN";
+// library "imgui";
+
+// For Emscripten
+// compiler "emcc";
+// linkerFlags "-sASYNCIFY -lembind --shell-file html/basic_template.html";
