@@ -2,8 +2,12 @@
 #include <string>
 #include <functional>
 #include <lib/OreonMath.hpp>
+#include <platform.h>
 #if __has_include("imgui.h")
 #include <imgui.h>
+#endif
+#if __has_include("nvwa/debug_new.h") && defined(DEBUG)
+#include <nvwa/debug_new.h>
 #endif
 
 namespace Mova {
@@ -81,6 +85,7 @@ struct Color {
 
   static const Color black, white, gray, darkgray, alpha;
   static const Color red, green, blue;
+  static const Color magenta;
 };
 
 struct Image;
@@ -88,18 +93,22 @@ struct DrawTarget {
   uint32_t* bitmap = nullptr;
   uint32_t width = 0, height = 0;
 
+  ~DrawTarget();
+
   virtual Color getPixel(int x, int y) const { return Color(bitmap[x + y * width]); }
   virtual void setPixel(int x, int y, Color color) { bitmap[x + y * width] = color.value; }
 
   void setCanvasSize(uint32_t width, uint32_t height);
   void clear(Color color = Color::black);
   void fillRect(int x, int y, int width, int height, Color color);
+  void drawRect(int x, int y, int width, int height, Color color);
   void drawImage(const Image& image, int x, int y, int width = 0, int height = 0, int srcX = 0, int srcY = 0, int srcW = 0, int srcH = 0);
 
   inline Color getPixel(VectorMath::vec2i pos) const { return getPixel(pos.x, pos.y); }
   inline void setPixel(VectorMath::vec2i pos, Color color) { setPixel(pos.x, pos.y, color); }
   inline void setCanvasSize(VectorMath::vec2i size) { setCanvasSize(size.x, size.y); }
   inline void fillRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color) { fillRect(pos.x, pos.y, size.x, size.y, color); }
+  inline void drawRect(VectorMath::vec2i pos, VectorMath::vec2i size, Color color) { drawRect(pos.x, pos.y, size.x, size.y, color); }
   inline void drawImage(const Image& image, VectorMath::vec2i pos, VectorMath::vec2i size = 0, VectorMath::vec2i srcPos = 0, VectorMath::vec2i srcSize = 0) { drawImage(image, pos.x, pos.y, size.x, size.y, srcPos.x, srcPos.y, srcSize.x, srcSize.y); }
   inline VectorMath::vec2i size() { return VectorMath::vec2i(width, height); }
 };

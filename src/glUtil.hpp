@@ -51,7 +51,7 @@ struct Mesh {
   std::vector<VectorMath::vec2f> uvs;
   std::vector<unsigned int> indices;
 
-  std::vector<unsigned int> vbos;
+  unsigned int vVBO = 0, nVBO = 0, uVBO = 0;
   unsigned int ebo = 0, vao = 0;
 
   void bind() {
@@ -61,31 +61,35 @@ struct Mesh {
 
   void update(unsigned int usage = GL_STATIC_DRAW) {
     bind();
-    unsigned int vboIndex = 0;
-    if (!vertices.empty()) updateVBO(vboIndex, (float*)vertices.data(), vertices.size() * sizeof(VectorMath::vec3f), 3, usage), vboIndex++;
-    if (!normals.empty()) updateVBO(vboIndex, (float*)normals.data(), normals.size() * sizeof(VectorMath::vec3f), 3, usage), vboIndex++;
-    if (!uvs.empty()) updateVBO(vboIndex, (float*)uvs.data(), uvs.size() * sizeof(VectorMath::vec2f), 2, usage), vboIndex++;
-    if (vbos.size() > vboIndex) vbos.resize(vboIndex);
+    if (!vertices.empty()) updateVBO(vVBO, (float*)vertices.data(), vertices.size() * sizeof(VectorMath::vec3f), 3, usage);
+    if (!normals.empty()) updateVBO(nVBO, (float*)normals.data(), normals.size() * sizeof(VectorMath::vec3f), 3, usage);
+    if (!uvs.empty()) updateVBO(uVBO, (float*)uvs.data(), uvs.size() * sizeof(VectorMath::vec2f), 2, usage);
     if (!ebo) glGenBuffers(1, &ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), usage);
   }
 
-  void updateVBO(unsigned int index, float* vertices, unsigned int size, unsigned int vertexSize, unsigned int usage) {
-    if (vbos.size() <= index) vbos.emplace_back();
-    if (!vbos[index]) glGenBuffers(1, &vbos[index]);
-    glBindBuffer(GL_ARRAY_BUFFER, vbos[index]);
+  void updateVBO(unsigned int& index, float* vertices, unsigned int size, unsigned int vertexSize, unsigned int usage) {
+    if (!index) glGenBuffers(1, &index);
+    glBindBuffer(GL_ARRAY_BUFFER, index);
     glBufferData(GL_ARRAY_BUFFER, size, vertices, usage);
     glVertexAttribPointer(index, vertexSize, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
 
   void draw() {
     bind();
-    for (int i = 0; i < 8; i++) {
-      if (i < vbos.size()) glEnableVertexAttribArray(i);
-      else glDisableVertexAttribArray(i);
+    if (!vertices.empty()) glEnableVertexAttribArray(0);
+    else glDisableVertexAttribArray(0);
+    if (!normals.empty()) glEnableVertexAttribArray(1);
+    else glDisableVertexAttribArray(1);
+    if (!uvs.empty()) glEnableVertexAttribArray(2);
+    else glDisableVertexAttribArray(2);
+    for (int i = 3; i < 8; i++) {
+      glDisableVertexAttribArray(i);
     }
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
   }
 
   void calculateNormals() {

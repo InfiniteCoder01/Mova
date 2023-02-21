@@ -171,12 +171,14 @@ template <typename T> const vec3<T> vec3<T>::down = vec3<T>(0, -1, 0);
 template <typename T> const vec3<T> vec3<T>::forward = vec3<T>(0, 0, 1);
 template <typename T> const vec3<T> vec3<T>::backward = vec3<T>(0, 0, -1);
 
+#ifndef min
 template <typename T> inline vec2<T> min(const vec2<T>& a, const vec2<T>& b) { return vec2<T>(Math::min(a.x, b.x), Math::min(a.y, b.y)); }
 template <typename T> inline vec2<T> max(const vec2<T>& a, const vec2<T>& b) { return vec2<T>(Math::max(a.x, b.x), Math::max(a.y, b.y)); }
-template <typename T> inline vec2<T> lerp(const vec2<T>& a, const vec2<T>& b, float t) { return vec2<T>(Math::lerp(a.x, b.x, t), Math::lerp(a.y, b.y, t)); }
-
 template <typename T> inline vec3<T> min(const vec3<T>& a, const vec3<T>& b) { return vec3<T>(Math::min(a.x, b.x), Math::min(a.y, b.y), Math::min(a.z, b.z)); }
 template <typename T> inline vec3<T> max(const vec3<T>& a, const vec3<T>& b) { return vec3<T>(Math::max(a.x, b.x), Math::max(a.y, b.y), Math::max(a.z, b.z)); }
+#endif
+
+template <typename T> inline vec2<T> lerp(const vec2<T>& a, const vec2<T>& b, float t) { return vec2<T>(Math::lerp(a.x, b.x, t), Math::lerp(a.y, b.y, t)); }
 template <typename T> inline vec3<T> lerp(const vec3<T>& a, const vec3<T>& b, float t) { return vec3<T>(Math::lerp(a.x, b.x, t), Math::lerp(a.y, b.y, t), Math::lerp(a.z, b.z, t)); }
 
 // clang-format off

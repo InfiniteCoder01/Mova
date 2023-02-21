@@ -106,6 +106,10 @@ Color Color::hsv(uint16_t h, uint8_t s, uint8_t v) {
   else return Color(y, m, x);
 }
 
+DrawTarget::~DrawTarget() {
+  // if (bitmap) delete[] (uint32_t*)bitmap; TODO: not works
+}
+
 void DrawTarget::setCanvasSize(uint32_t width, uint32_t height) {
   if (this->width != width || this->height != height || !bitmap) {
     if (bitmap) delete[] bitmap;
@@ -127,6 +131,13 @@ void DrawTarget::fillRect(int x, int y, int width, int height, Color color) {
       setPixel(x1, y1, color);
     }
   }
+}
+
+void DrawTarget::drawRect(int x, int y, int width, int height, Color color) {
+  fillRect(x, y, width, 1, color);
+  fillRect(x, y + height - 1, width, 1, color);
+  fillRect(x, y, 1, height, color);
+  fillRect(x + width, y, 1, height, color);
 }
 
 void DrawTarget::drawImage(const Image& image, int x, int y, int width, int height, int srcX, int srcY, int srcW, int srcH) {
@@ -211,6 +222,7 @@ constexpr Color Color::alpha = Color(0, 0, 0, 0);
 constexpr Color Color::red = Color(255, 0, 0);
 constexpr Color Color::green = Color(0, 255, 0);
 constexpr Color Color::blue = Color(0, 0, 255);
+constexpr Color Color::magenta = Color(255, 0, 255);
 
 /*          IMGUI          */
 #if __has_include("imgui.h")
