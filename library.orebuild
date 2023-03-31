@@ -7,11 +7,11 @@ flags "-std=c++17";
 flags "-DDEBUG -fsanitize=leak -g3";
 
 // For GCC
-// linkerFlags "-Ofast -lX11 -lXrandr";
-// library "imgui";
+linkerFlags "-Ofast -lX11 -lXrandr -lGL";
+library "imgui";
 
 // For MinGW
-linkerFlags "-Ofast -lgdi32";
+// linkerFlags "-O3 -lgdi32 -lopengl32 -DWIN32_LEAN_AND_MEAN";
 // library "imgui";
 
 // For Emscripten

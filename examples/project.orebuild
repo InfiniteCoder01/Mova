@@ -10,11 +10,11 @@ flags "-Ofast -std=c++17";
 flags "-DDEBUG -fsanitize=leak -g3";
 
 // For GCC
-// output "bin/test";
-// library "imgui";
+output "bin/test";
+library "imgui";
 
 // For MinGW
-output "bin\test.exe";
+// output "test.exe";
 // library "imgui";
 
 // For Emscripten
