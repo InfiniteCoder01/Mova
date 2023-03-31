@@ -1,47 +1,24 @@
-#include <mova.h>
-#include <GL/gl.h>
-#include <lib/loadOpenGL.h>
+#include <movaBackend.hpp>
 
-void glSample() {
-  static unsigned int VAO, VBO;
-  glClearColor(1, 0, 0, 1);
-  glClear(GL_COLOR_BUFFER_BIT);
-  if (!VAO) {
-    static const float vertices[] = {-1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f};
-
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
-
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  }
-  glEnableVertexAttribArray(0);
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
-}
+#include <chrono>
+using namespace std::chrono;
 
 int main() {
-  MvImage image = MvImage("test.png");
   MvWindow window = MvWindow("Mova");
-  MvWindow window2 = MvWindow("Mewo");
-  MvWindow window3 = MvWindow("OpenGL", MvRendererType::OpenGL);
-  while (window.isOpen && window2.isOpen && window3.isOpen) {
-    window.clear(MvColor::red);
-    window.fillRect(window.getMousePos(), 256, MvColor::green);
-    window.fillRect(window.size() / 2 + Mova::getMouseDelta() * 10 - 10, 20, Mova::isMouseButtonHeld(MOUSE_LEFT) ? MvColor::red : MvColor::green);
-    if (Mova::isMouseButtonPressed(MOUSE_RIGHT)) puts("Pressed");
-    if (Mova::isMouseButtonReleased(MOUSE_RIGHT)) puts("Released");
-    if (Mova::isKeyPressed(MvKey::A)) puts("A Pressed");
-    if (Mova::isKeyHeld(MvKey::Shift)) puts("Shift Held");
-    if (Mova::isKeyReleased(MvKey::Meta)) puts("Meta Released");
-    if (Mova::getCharPressed()) printf("Char: %c\n", Mova::getCharPressed());
-    glViewport(0, 0, window3.width, window3.height);
-    glSample();
+  MvImage image = MvImage("Assets/test.png");
+  uint16_t hue = 0;
+  while (window.isOpen()) {
+    window.clear();
 
-    window2.clear();
-    window2.drawImage(image, 10, 10, 256, 256);
+    MvColor color;
+    if (Mova::isMouseButtonPressed(MvMouseLeft)) color = MvColor::magenta;
+    else if (Mova::isMouseButtonHeld(MvMouseLeft)) color = MvColor::red;
+    else color = MvColor::hsv(hue, 100, 100);
+
+    window.fillRect(window.getMousePosition(), 100, color);
+    if (Mova::isKeyHeld(MvKey::Escape)) window.drawImage(image, VectorMath::vec2i(0), VectorMath::vec2i(-100, 100));
+    hue += static_cast<uint32_t>(Mova::getScrollY());
+
     Mova::nextFrame();
   }
 }
