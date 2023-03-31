@@ -1,0 +1,23 @@
+watch "IconsFontAwesome6.h";
+files "gui.cpp";
+// files "sample.cpp";
+// files "imgui.cpp";
+
+library "Mova";
+flags "-Ofast -std=c++17";
+
+// For debug
+flags "-DDEBUG -fsanitize=leak -g3";
+
+// For GCC
+// output "bin/test";
+// library "imgui";
+
+// For MinGW
+output "bin\test.exe";
+// library "imgui";
+
+// For Emscripten
+// compiler "emcc";
+// flags "--embed-file Assets";
+// output "html/index.html";

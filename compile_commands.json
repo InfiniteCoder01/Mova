@@ -1,0 +1,110 @@
+[
+  {
+    "arguments": [
+      "g++",
+      "-c",
+      "-Isrc/",
+      "-ID:/Dev/C++/libraries/imgui/.",
+      "-std=c++17",
+      "-DDEBUG",
+      "-fsanitize=leak",
+      "-g3",
+      "-o",
+      "build/emscripten.cpp.o",
+      "src/backend/emscripten.cpp"
+    ],
+    "directory": "D:/Dev/C++/libraries/Mova",
+    "file": "D:/Dev/C++/libraries/Mova/src/backend/emscripten.cpp",
+    "output": "D:/Dev/C++/libraries/Mova/build/emscripten.cpp.o"
+  },
+  {
+    "arguments": [
+      "g++",
+      "-c",
+      "-Isrc/",
+      "-ID:/Dev/C++/libraries/imgui/.",
+      "-std=c++17",
+      "-DDEBUG",
+      "-fsanitize=leak",
+      "-g3",
+      "-o",
+      "build/linux.cpp.o",
+      "src/backend/linux.cpp"
+    ],
+    "directory": "D:/Dev/C++/libraries/Mova",
+    "file": "D:/Dev/C++/libraries/Mova/src/backend/linux.cpp",
+    "output": "D:/Dev/C++/libraries/Mova/build/linux.cpp.o"
+  },
+  {
+    "arguments": [
+      "g++",
+      "-c",
+      "-Isrc/",
+      "-ID:/Dev/C++/libraries/imgui/.",
+      "-std=c++17",
+      "-DDEBUG",
+      "-fsanitize=leak",
+      "-g3",
+      "-o",
+      "build/windows.cpp.o",
+      "src/backend/windows.cpp"
+    ],
+    "directory": "D:/Dev/C++/libraries/Mova",
+    "file": "D:/Dev/C++/libraries/Mova/src/backend/windows.cpp",
+    "output": "D:/Dev/C++/libraries/Mova/build/windows.cpp.o"
+  },
+  {
+    "arguments": [
+      "g++",
+      "-c",
+      "-Isrc/",
+      "-ID:/Dev/C++/libraries/imgui/.",
+      "-std=c++17",
+      "-DDEBUG",
+      "-fsanitize=leak",
+      "-g3",
+      "-o",
+      "build/movaBackend.cpp.o",
+      "src/movaBackend.cpp"
+    ],
+    "directory": "D:/Dev/C++/libraries/Mova",
+    "file": "D:/Dev/C++/libraries/Mova/src/movaBackend.cpp",
+    "output": "D:/Dev/C++/libraries/Mova/build/movaBackend.cpp.o"
+  },
+  {
+    "arguments": [
+      "g++",
+      "-c",
+      "-Isrc/",
+      "-ID:/Dev/C++/libraries/imgui/.",
+      "-std=c++17",
+      "-DDEBUG",
+      "-fsanitize=leak",
+      "-g3",
+      "-o",
+      "build/movaGUI.cpp.o",
+      "src/movaGUI.cpp"
+    ],
+    "directory": "D:/Dev/C++/libraries/Mova",
+    "file": "D:/Dev/C++/libraries/Mova/src/movaGUI.cpp",
+    "output": "D:/Dev/C++/libraries/Mova/build/movaGUI.cpp.o"
+  },
+  {
+    "arguments": [
+      "g++",
+      "-c",
+      "-Isrc/",
+      "-ID:/Dev/C++/libraries/imgui/.",
+      "-std=c++17",
+      "-DDEBUG",
+      "-fsanitize=leak",
+      "-g3",
+      "-o",
+      "build/movaImage.cpp.o",
+      "src/movaImage.cpp"
+    ],
+    "directory": "D:/Dev/C++/libraries/Mova",
+    "file": "D:/Dev/C++/libraries/Mova/src/movaImage.cpp",
+    "output": "D:/Dev/C++/libraries/Mova/build/movaImage.cpp.o"
+  }
+]
