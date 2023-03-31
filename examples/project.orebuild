@@ -1,4 +1,4 @@
-watch "";
+watch "IconsFontAwesome6.h";
 files "gui.cpp";
 // files "sample.cpp";
 // files "imgui.cpp";
