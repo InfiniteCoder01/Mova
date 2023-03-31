@@ -167,9 +167,5 @@ template <typename... Args> void Text(std::string_view format, Args... args) { T
 #pragma endregion InlineWidgets
 } // namespace MvGui
 
-using MvGuiPopupFlags = MvGui::PopupFlags;
-using MvGuiDockDirection = MvGui::DockDirection;
 using MvGuiTextInputType = MvGui::TextInputType;
-
-using MvGuiPopupData = MvGui::PopupData;
 using MvGuiTextInputState = MvGui::TextInputState;
