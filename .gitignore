@@ -30,13 +30,3 @@
 *.exe
 *.out
 *.app
-
-# Cache
-.cache
-build
-examples/bin
-examples/build
-
-# Dev stuff
-./.clang-tidy
-./compile_commands.json

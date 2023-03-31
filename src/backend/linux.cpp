@@ -1,14 +1,8 @@
 #include "internal.hpp"
-<<<<<<< HEAD
 #include "movaImage.hpp"
 #include <X11/X.h>
 
 #ifdef __LINUX__
-=======
-
-#ifdef __LINUX__
-#include <X11/X.h>
->>>>>>> Develop
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <unordered_map>
