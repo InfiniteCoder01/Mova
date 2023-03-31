@@ -23,9 +23,6 @@ struct WidgetState {
 static Style style;
 static WidgetState widgetState;
 static MvWindow* window = nullptr;
-// static vec2i offset = 0;
-// static std::vector<PopupData*> dockList;
-// static std::vector<PopupData> popups;
 Origin origin;
 
 #pragma region Utils
@@ -97,97 +94,6 @@ void widget(vec2u size) {
 void widget(std::string_view text) { widget(drawTextTL(text)); }
 
 #pragma endregion Widget
-#pragma region Popup
-// struct Popup {
-//   vec2i offset;
-//   Origin origin;
-//   Rect<int32_t> rect;
-// };
-
-// static std::stack<Popup> popupStack;
-
-// void Begin(PopupData& data, std::string_view title, PopupFlags flags) { // TODO: Framebuffer, popup should use dockrect when docking
-//   if (data.dockState.direction != DockDirection::None) pushStyle(style.windowRounding, 0);
-
-//   popupStack.push(Popup{
-//       .offset = data.rect.position(),
-//       .origin = origin,
-//       .rect = data.rect,
-//   });
-
-//   // * Draw
-//   Rect<int32_t> titleBar;
-//   window->fillRoundRect(data.rect.border(style.windowBorderThickness), style.separatorColor, style.windowRounding); // TODO: optimize
-//   window->fillRoundRect(data.rect, style.backgroundColor, style.windowRounding);
-//   if (flags & PopupFlags::TitleBar) {
-//     titleBar = Rect<int32_t>(data.rect.x, data.rect.y, data.rect.width, window->getFont().height() + style.framePadding.y * 2);
-//     window->fillRoundRect(titleBar, style.titleBarColor, style.windowRounding, style.windowRounding, 0, 0);
-//     window->fillRect(titleBar.left(), titleBar.bottom() - style.separatorThickness / 2, titleBar.width, style.separatorThickness, style.separatorColor);
-//     drawTextTL(titleBar.position(), title);
-//     popupStack.top().offset.y += titleBar.height + style.separatorThickness / 2;
-//   }
-
-//   // * Cursor
-//   // offset += popupStack.top().offset;
-//   home();
-
-//   // * Update
-//   if (data.resizingW) data.rect.width = Math::max(data.rect.width + Mova::getMouseDeltaX(), style.contentPadding.x * 2);
-//   if (data.resizingH) data.rect.height = Math::max(data.rect.height + Mova::getMouseDeltaY(), style.contentPadding.y * 2 + titleBar.height);
-//   if (data.dragging) {
-//     data.rect += Mova::getMouseDelta();
-//     data.rect.y = Math::max(data.rect.y, Math::min(-titleBar.height + 3, 0));
-//   }
-
-//   // * Update mouse
-//   { // Move
-//     Rect<int32_t> moveRect = data.rect;
-//     if (flags & PopupFlags::MoveByTitleBarOnly) moveRect = titleBar;
-//     else moveRect.width -= style.windowResizeZone / 2, moveRect.height -= style.windowResizeZone / 2;
-//     if (moveRect.contains(window->getMousePosition()) && Mova::isMouseButtonPressed(Mova::MouseLeft)) data.dragging = true;
-//   }
-//   if (Mova::isMouseButtonPressed(Mova::MouseLeft) && !(flags & PopupFlags::NoResize)) { // Resize
-//     Rect<int32_t> widthRect = data.rect;
-//     widthRect.x += widthRect.width - style.windowResizeZone / 2, widthRect.width = style.windowResizeZone;
-//     Rect<int32_t> heightRect = data.rect;
-//     heightRect.y += heightRect.height - style.windowResizeZone / 2, heightRect.height = style.windowResizeZone;
-//     if (widthRect.contains(window->getMousePosition())) data.resizingW = true;
-//     if (heightRect.contains(window->getMousePosition())) data.resizingH = true;
-//   }
-//   if (Mova::isMouseButtonReleased(Mova::MouseLeft)) data.dragging = data.resizingW = data.resizingH = false;
-
-//   // * Docking
-//   if (data.dockState.direction != DockDirection::None) {
-//     popStyle(style.windowRounding);
-//     if (data.dragging && Mova::getMouseDelta() != 0) UndockPopup(data);
-//   }
-// }
-
-// void End() {
-//   MV_ASSERT(!popupStack.empty(), "Mismatch Begin/End!");
-
-//   // offset -= popupStack.top().offset;
-//   origin = popupStack.top().origin;
-//   widget.rect = popupStack.top().rect;
-//   popupStack.pop();
-// }
-
-// void DockPopup(PopupData& data, float size, DockDirection direction) {
-//   data.dockState.direction = direction;
-//   data.dockState.size = size;
-//   // if (std::find(dockList.begin(), dockList.end(), &data) == dockList.end()) dockList.push_back(&data);
-// }
-
-// void UndockPopup(PopupData& data) {
-//   data.dockState.direction = DockDirection::None;
-//   // auto it = std::find(dockList.begin(), dockList.end(), &data);
-//   // if (it != dockList.end()) dockList.erase(it);
-// }
-
-// void Dockspace() { // TODO:!!!
-//   //
-// }
-#pragma endregion Popup
 #pragma region Service
 
 /**

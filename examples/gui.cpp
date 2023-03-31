@@ -22,26 +22,10 @@ int main() {
     MvGui::Text("Hello, %s!", ICON_FA_IMAGE);
     MvGui::Button("Debug " ICON_FA_BUG);
 
-    static bool popup = false;
-    if (MvGui::isWidgetPressed()) popup = !popup;
+    static bool button = false;
+    if (MvGui::isWidgetPressed()) button = !button;
+    if (button) MvGui::Button("Dock " ICON_FA_WINDOW_RESTORE);
 
-    MvGui::Button("Dock " ICON_FA_WINDOW_RESTORE);
-
-    // static MvGuiPopupData data;
-    // static MvGuiPopupData data2;
-    // if (MvGui::isWidgetPressed()) {
-    //   MvGui::DockPopup(data);
-    //   MvGui::DockPopup(data2);
-    // }
-    // if (popup) {
-    //   MvGui::Begin(data, "Debugger", MvGuiPopupFlags::TitleBar | MvGuiPopupFlags::MoveByTitleBarOnly);
-    //   MvGui::Button("Test");
-    //   if (MvGui::isWidgetPressed()) MvGui::UndockPopup(data);
-    //   MvGui::End();
-
-    //   MvGui::Begin(data2, "Another popup");
-    //   MvGui::End();
-    // }
     static MvGuiTextInputState state;
     MvGui::TextInput(state);
     Mova::nextFrame();
