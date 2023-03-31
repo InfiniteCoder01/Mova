@@ -103,6 +103,7 @@ bool isWidgetHovered();
 bool isWidgetPressed();
 
 // * Popup
+<<<<<<< HEAD
 #pragma region PopupData
 enum class DockDirection { None, Top, Bottom, Left, Right, All };
 
@@ -136,6 +137,41 @@ void DockPopup(PopupData& data, float size = 0.3, DockDirection direction = Dock
 void UndockPopup(PopupData& data);
 
 void Dockspace();
+=======
+// #pragma region PopupData
+// enum class DockDirection { None, Top, Bottom, Left, Right, All };
+
+// struct PopupData {
+//   VectorMath::Rect<int32_t> rect = VectorMath::Rect<int32_t>(100, 100, 300, 400);
+//   bool dragging = false;
+//   bool resizingW = false, resizingH = false;
+
+//   struct DockState {
+//     DockDirection direction = DockDirection::None;
+//     float size = 0.3;
+//     VectorMath::Rect<int32_t> dockRect;
+//   } dockState;
+// };
+
+// enum class PopupFlags : uint64_t {
+//   None = 0,
+//   TitleBar = 1,
+//   MoveByTitleBarOnly = 2,
+//   NoResize = 4,
+// };
+
+// inline bool operator&(const PopupFlags& lsh, const PopupFlags& rsh) { return static_cast<uint64_t>(lsh) & static_cast<uint64_t>(rsh); }
+// inline PopupFlags operator|(const PopupFlags& lsh, const PopupFlags& rsh) { return static_cast<PopupFlags>(static_cast<uint64_t>(lsh) | static_cast<uint64_t>(rsh)); }
+// #pragma endregion PopupData
+
+// void Begin(PopupData& data, std::string_view title = "", PopupFlags flags = PopupFlags::TitleBar);
+// void End();
+
+// void DockPopup(PopupData& data, float size = 0.3, DockDirection direction = DockDirection::Left);
+// void UndockPopup(PopupData& data);
+
+// void Dockspace();
+>>>>>>> Develop
 
 // * Inline
 #pragma region InlineUtilities

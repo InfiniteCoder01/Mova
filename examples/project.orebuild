@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 watch "";
+=======
+watch "IconsFontAwesome6.h";
+>>>>>>> Develop
 files "gui.cpp";
 // files "sample.cpp";
 // files "imgui.cpp";
@@ -10,11 +14,19 @@ flags "-Ofast -std=c++17";
 flags "-DDEBUG -fsanitize=leak -g3";
 
 // For GCC
+<<<<<<< HEAD
 output "bin/test";
 library "imgui";
 
 // For MinGW
 // output "test.exe";
+=======
+// output "bin/test";
+// library "imgui";
+
+// For MinGW
+output "bin\test.exe";
+>>>>>>> Develop
 // library "imgui";
 
 // For Emscripten
