@@ -1,16 +1,7 @@
-#include "lib/OreonMath.hpp"
-#include "lib/logassert.h"
-#include "movaBackend.hpp"
-#include "movaImage.hpp"
-#include <algorithm>
-#include <codecvt>
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <locale>
-#include <map>
 #include <movaGUI.hpp>
-#include <set>
+#include <utility>
+#include <codecvt>
+#include <locale>
 #include <stack>
 
 using namespace VectorMath;
@@ -18,14 +9,14 @@ using namespace VectorMath;
 namespace MvGui {
 struct WidgetState {
   Rect<int32_t> rect = Rect<int32_t>::zero;
+  Rect<int32_t> targetRect = Rect<int32_t>::zero;
+  Rect<int32_t> viewportRect = Rect<int32_t>::zero;
 };
 
 static Style style;
 static WidgetState widgetState;
 static MvWindow* window = nullptr;
-// static vec2i offset = 0;
-// static std::vector<PopupData*> dockList;
-// static std::vector<PopupData> popups;
+static MvImage* target = nullptr;
 Origin origin;
 
 #pragma region Utils
@@ -46,7 +37,7 @@ static std::wstring utf8_to_ws(const std::string& utf8) {
  * @param text Text to draw
  * @return VectorMath::vec2u The size of the text
  */
-vec2u drawTextTL(vec2i position, std::string_view text) { return window->drawText(position + style.framePadding + vec2u(0, window->getFont().ascent()), text, style.foregroundColor); }
+vec2u drawTextTL(vec2i position, std::string_view text) { return getTarget().drawText(position + style.framePadding + vec2u(0, window->getFont().ascent()), text, style.foregroundColor); }
 
 /**
  * @brief Draw top-left aligned text with style.framePadding and style.foregroundColor
@@ -67,7 +58,228 @@ vec2u drawTextTL(int32_t x, int32_t y, std::string_view text) { return drawTextT
 vec2u drawTextTL(std::string_view text) { return drawTextTL(origin(), text); }
 
 #pragma endregion Drawment
+#pragma region Popup
+struct Popup {
+  MvImage image;
+  vec2i position = 100;
+  Dockspace* dockspace = nullptr;
+  bool updated = false;
+  bool draggingX = false, draggingY = false;
+  bool resizingWidth = false, resizingHeight = false;
+  Popup* restore;
+};
+
+template <typename Key, typename Value> struct OrderedMap {
+  Value& operator[](const Key& key) {
+    for (const auto& entry : m_Map) {
+      if (key == entry->first) return entry->second;
+    }
+    m_Map.push_back(std::make_unique<std::pair<Key, Value>>(key, Value()));
+    return (*m_Map.rbegin())->second;
+  }
+
+  Value& getOrCreate(const Key& key, std::function<Value()> constructor) {
+    for (const auto& entry : m_Map) {
+      if (key == entry->first) return entry->second;
+    }
+    m_Map.push_back(std::make_unique<std::pair<Key, Value>>(key, constructor()));
+    return (*m_Map.rbegin())->second;
+  }
+
+  void callOptional(const Key& key, std::function<void(Value&)> function) {
+    for (const auto& entry : m_Map) {
+      if (key == entry->first) {
+        function(entry->second);
+        return;
+      }
+    }
+  }
+
+  auto begin() { return m_Map.begin(); }
+  auto end() { return m_Map.end(); }
+  auto rbegin() { return m_Map.rbegin(); }
+  auto rend() { return m_Map.rend(); }
+
+  void erase(const Key& key) {
+    m_Map.erase(std::remove_if(begin(), end(), [&key](auto& entry) {
+      return entry->first == key;
+    }));
+  }
+
+private:
+  std::vector<std::unique_ptr<std::pair<Key, Value>>> m_Map;
+};
+
+static OrderedMap<std::string, Popup> popups;
+static Origin backupOrigin;
+static Popup* currentPopup = nullptr;
+static Popup* mouseFocus = nullptr;
+static std::string mouseFocusID;
+
+static Dockspace dockspace;
+
+/**
+ * @brief Creates a popup. All widgets until End will be drawn to it.
+ *
+ * @param title Title of the popup, supports ImGui format with double hash
+ * @param flags Popup flags
+ */
+void Begin(std::string_view title, bool titleBar) {
+  std::string_view id = title;
+  {
+    const size_t index = title.find("##");
+    if (index != std::string_view::npos) {
+      id = title.substr(index + 2);
+      title = title.substr(0, index);
+    }
+  }
+  auto& popup = popups.getOrCreate(std::string(id), []() {
+    Popup popup;
+    popup.image.setSize(100, 100);
+    popup.image.setFont(window->getFont());
+    return popup;
+  });
+
+  popup.updated = true;
+  vec2u size = popup.image.size();
+  if (popup.dockspace) getTarget().setViewport(popup.dockspace->rect()), size = popup.dockspace->rect().size();
+  else target = &popup.image;
+  popup.restore = currentPopup;
+  currentPopup = &popup;
+  backupOrigin = origin;
+  home();
+
+  // * Update
+  uint32_t titleBarHeight = getTarget().getFont().height() + style.framePadding.y * 2;
+  if (Mova::isMouseButtonPressed(Mova::MouseLeft) && currentPopup == mouseFocus) {
+    if (window->getMouseX() - popup.position.x > size.x - style.windowResizeZone) popup.resizingWidth = true;
+    if (window->getMouseY() - popup.position.y > size.y - style.windowResizeZone) popup.resizingHeight = true;
+    if (window->getMouseX() - popup.position.x < style.windowResizeZone) popup.resizingWidth = true, popup.draggingX = true;
+    if (window->getMouseY() - popup.position.y < style.windowResizeZone) popup.resizingHeight = true, popup.draggingY = true;
+    if (titleBar && window->getMouseY() - popup.position.y < titleBarHeight && !popup.resizingWidth && !popup.resizingHeight) popup.draggingX = popup.draggingY = true;
+    auto it = std::find_if(popups.begin(), popups.end(), [&popup](const auto& entry) {
+      return &entry->second == &popup;
+    });
+    std::rotate(popups.begin(), it, it + 1);
+  }
+
+  if (Mova::isMouseButtonReleased(Mova::MouseLeft)) {
+    popup.draggingX = popup.draggingY = false;
+    popup.resizingWidth = popup.resizingHeight = false;
+  }
+
+  if (popup.dockspace) {
+    if (popup.dockspace->root()) {
+      if (popup.resizingWidth || popup.resizingHeight) popup.resizingWidth = popup.resizingHeight = popup.draggingX = popup.draggingY = false;
+    } else {
+      if (popup.dockspace->parent().direction() != DockDirection::Right && popup.draggingX && popup.resizingWidth) popup.draggingX = popup.resizingWidth = false;
+      if (popup.dockspace->parent().direction() != DockDirection::Bottom && popup.draggingY && popup.resizingHeight) popup.draggingY = popup.resizingHeight = false;
+      if (popup.dockspace->parent().direction() != DockDirection::Left && !popup.draggingX) popup.resizingWidth = false;
+      if (popup.dockspace->parent().direction() != DockDirection::Top && !popup.draggingY) popup.resizingHeight = false;
+    }
+  }
+
+  // * Move & Resize
+  vec2i deltaSize = 0;
+  if (popup.resizingWidth) deltaSize.x += Mova::getMouseDeltaX();
+  if (popup.resizingHeight) deltaSize.y += Mova::getMouseDeltaY();
+  if (popup.draggingX) popup.position.x += Mova::getMouseDeltaX(), deltaSize.x *= -1;
+  if (popup.draggingY) popup.position.y += Mova::getMouseDeltaY(), deltaSize.y *= -1;
+  { // * Resize
+    vec2u oldSize = size;
+    size = max(vec2i(size) + deltaSize, vec2i(65, getTarget().getFont().height() + style.framePadding.y * 2));
+    deltaSize = vec2i(size) - vec2i(oldSize);
+    if (popup.dockspace) {
+      if (popup.resizingWidth) popup.dockspace->parent().ratio(popup.dockspace->parent().ratio() * size.x / oldSize.x);
+      if (popup.resizingHeight) popup.dockspace->parent().ratio(popup.dockspace->parent().ratio() * size.y / oldSize.y);
+      if (!(popup.resizingWidth || popup.resizingHeight) && (popup.draggingX || popup.draggingY) && Mova::getMouseDelta() != 0) popup.dockspace->reset();
+    } else popup.image.setSize(size);
+  }
+
+  // * Draw
+  {
+    if (popup.dockspace) getTarget().fillRect(0, size, style.backgroundColor);
+    else getTarget().clear(style.backgroundColor);
+    getTarget().drawRect(0, size, style.separatorColor, style.windowBorderThickness);
+
+    const uint32_t radius = popup.dockspace ? 0 : style.windowRounding + style.windowBorderThickness;
+    const vec2u offsets[] = {vec2u(0, 0), vec2u(size.x - radius, 0), vec2u(0, size.y - radius), vec2u(size.x - radius, size.y - radius)};
+    const vec2i corners[] = {vec2i(radius, radius), vec2i(-1, radius), vec2i(radius, -1), vec2i(-1, -1)};
+    for (uint32_t i = 0; i < 4; i++) {
+      for (uint32_t y = 0; y < radius; y++) {
+        for (uint32_t x = 0; x < radius; x++) {
+          const vec2i roundVector = corners[i] - vec2i(x, y);
+          const bool border = roundVector.sqrMagnitude() < radius * radius;
+          const bool inside = roundVector.sqrMagnitude() < style.windowRounding * style.windowRounding;
+          if (!inside) {
+            MvColor color = MvColor::transperent;
+            if (border) color = style.separatorColor;
+            getTarget().set(vec2u(x, y) + offsets[i], color);
+          }
+        }
+      }
+    }
+    if (titleBar) {
+      getTarget().fillRect(0, titleBarHeight - style.separatorThickness, getTarget().getViewport().width, style.separatorThickness, style.separatorColor);
+      drawTextTL(0, title);
+      auto viewport = getTarget().getViewport();
+      viewport.height -= titleBarHeight;
+      viewport.y += titleBarHeight;
+      getTarget().setViewport(viewport);
+    }
+  }
+}
+
+/**
+ * @brief End drawing to the popup
+ *
+ */
+void End() {
+  MV_ASSERT(currentPopup, "Mismatch Begin/End!");
+  if (currentPopup->dockspace) getTarget().setViewport(Rect<uint32_t>(0, getTarget().size()));
+  else getTarget().setViewport(Rect<uint32_t>(0, getTarget().size())), target = window;
+  currentPopup = currentPopup->restore;
+  origin = backupOrigin;
+}
+
+/**
+ * @brief Get popup ID, that is currently under mouse
+ *
+ * @return std::string ID
+ */
+std::string getPopupUnderMouse() { return mouseFocusID; }
+
+/**
+ * @brief Get root dockspace
+ *
+ * @return Dockspace& Root dockspace
+ */
+Dockspace& getDockspace() { return dockspace; }
+
+static bool s_ShowDockspace = true;
+
+/**
+ * @brief Is the dockspace shown
+ *
+ * @return Is the dockspace shown?
+ */
+bool showDockspace() { return s_ShowDockspace; }
+
+/**
+ * @brief Set the dockspace shown to enable
+ *
+ * @param enable Is the dockspace shown?
+ */
+void showDockspace(bool enable) { s_ShowDockspace = enable; }
+#pragma endregion Popup
 #pragma region Widget
+
+/**
+ * @brief Create an empty widget
+ *
+ * @param width Width of the widget
+ */
+void widget(uint32_t width) { widget(width, getTarget().getFont().height()); }
 
 /**
  * @brief Create an empty widget
@@ -83,7 +295,11 @@ void widget(uint32_t width, uint32_t height) { widget(vec2u(width, height)); }
  * @param size Size of the widget
  */
 void widget(vec2u size) {
-  widgetState.rect = Rect<int32_t>(origin(), size + style.framePadding * 2);
+  widgetState.rect = widgetState.targetRect = widgetState.viewportRect = Rect<int32_t>(origin(), size + style.framePadding * 2);
+  if (currentPopup && !currentPopup->dockspace) widgetState.rect += currentPopup->position;
+  widgetState.rect += getTarget().getViewport().position();
+  widgetState.targetRect += getTarget().getViewport().position();
+
   origin.cursor.x += widgetState.rect.width + style.contentPadding.x;
   origin.lineHeight = Math::max(origin.lineHeight, widgetState.rect.height);
   newLine();
@@ -96,100 +312,141 @@ void widget(vec2u size) {
  */
 void widget(std::string_view text) { widget(drawTextTL(text)); }
 
+/**
+ * @brief Create an empty widget without frame padding
+ *
+ * @param width Width of the widget
+ */
+void widgetShrank(uint32_t width) { widgetShrank(width, getTarget().getFont().height()); }
+
+/**
+ * @brief Create an empty widget without frame padding
+ *
+ * @param width Width of the widget
+ * @param height Height of the widget
+ */
+void widgetShrank(uint32_t width, uint32_t height) { widgetShrank(vec2u(width, height)); }
+
+/**
+ * @brief Create an empty widget without frame padding
+ *
+ * @param size Size of the widget
+ */
+void widgetShrank(vec2u size) {
+  widgetState.rect = widgetState.targetRect = widgetState.viewportRect = Rect<int32_t>(origin(), size);
+  if (currentPopup && !currentPopup->dockspace) widgetState.rect += currentPopup->position;
+  widgetState.rect += getTarget().getViewport().position();
+  widgetState.targetRect += getTarget().getViewport().position();
+
+  origin.cursor.x += widgetState.rect.width + style.contentPadding.x;
+  origin.lineHeight = Math::max(origin.lineHeight, widgetState.rect.height);
+  newLine();
+}
+
 #pragma endregion Widget
-#pragma region Popup
-// struct Popup {
-//   vec2i offset;
-//   Origin origin;
-//   Rect<int32_t> rect;
-// };
+#pragma region Dockspace
 
-// static std::stack<Popup> popupStack;
+/**
+ * @brief Reset the dockspace
+ *
+ */
+void Dockspace::reset() {
+  if (m_Separated) m_Separated->reset();
+  if (m_Left) m_Left->reset();
+  delete m_Separated;
+  delete m_Left;
+  popups.callOptional(m_Popup, [](Popup& popup) {
+    const vec2f scale = vec2f(popup.image.size()) / vec2f(popup.dockspace->rect().size());
+    popup.position = window->getMousePosition() + vec2f(popup.position - window->getMousePosition()) * scale;
+  });
+  m_Separated = m_Left = nullptr;
+  m_Popup = "";
+  m_Direction = DockDirection::None;
+}
 
-// void Begin(PopupData& data, std::string_view title, PopupFlags flags) { // TODO: Framebuffer, popup should use dockrect when docking
-//   if (data.dockState.direction != DockDirection::None) pushStyle(style.windowRounding, 0);
+/**
+ * @brief Split the dockspace
+ *
+ * @param direction Direction to split, for example DockDirection::Left
+ * @param ratio The ratio, for example 0.2
+ * @return Dockspace& The separated area, for example, dockspace wich is 0.2 of the width of the screen, aligned to the left
+ */
+Dockspace& Dockspace::split(DockDirection direction, float ratio) {
+  MV_ASSERT(m_Popup.empty(), "Dockspace is already docked (%s)!", m_Popup.c_str());
+  MV_ASSERT(m_Direction == DockDirection::None, "Dockspace is already splitted!");
+  m_Direction = direction;
+  m_Ratio = ratio;
+  m_Separated = new Dockspace(this);
+  m_Left = new Dockspace(this);
+  return *m_Separated;
+}
 
-//   popupStack.push(Popup{
-//       .offset = data.rect.position(),
-//       .origin = origin,
-//       .rect = data.rect,
-//   });
+/**
+ * @brief Dock the popup
+ *
+ * @param id The id of the popup to dock
+ */
+void Dockspace::dock(std::string_view id) {
+  MV_ASSERT(m_Popup.empty(), "Dockspace is already docked (%s)!", m_Popup.c_str());
+  MV_ASSERT(m_Direction == DockDirection::None, "Dockspace is already splitted!");
+  m_Popup = id;
+}
 
-//   // * Draw
-//   Rect<int32_t> titleBar;
-//   window->fillRoundRect(data.rect.border(style.windowBorderThickness), style.separatorColor, style.windowRounding); // TODO: optimize
-//   window->fillRoundRect(data.rect, style.backgroundColor, style.windowRounding);
-//   if (flags & PopupFlags::TitleBar) {
-//     titleBar = Rect<int32_t>(data.rect.x, data.rect.y, data.rect.width, window->getFont().height() + style.framePadding.y * 2);
-//     window->fillRoundRect(titleBar, style.titleBarColor, style.windowRounding, style.windowRounding, 0, 0);
-//     window->fillRect(titleBar.left(), titleBar.bottom() - style.separatorThickness / 2, titleBar.width, style.separatorThickness, style.separatorColor);
-//     drawTextTL(titleBar.position(), title);
-//     popupStack.top().offset.y += titleBar.height + style.separatorThickness / 2;
-//   }
+Rect<uint32_t> emptyDockspaceRect;
 
-//   // * Cursor
-//   // offset += popupStack.top().offset;
-//   home();
+void updateDockspace(Dockspace& dockspace, Rect<uint32_t> rect) {
+  if (dockspace.isSplited()) {
+    Rect<uint32_t> separated = rect, left = rect;
+    if (dockspace.direction() == DockDirection::Left || dockspace.direction() == DockDirection::Right) separated.width *= dockspace.ratio(), left.width *= 1.f - dockspace.ratio();
+    if (dockspace.direction() == DockDirection::Top || dockspace.direction() == DockDirection::Bottom) separated.height *= dockspace.ratio(), left.height *= 1.f - dockspace.ratio();
+    if (dockspace.direction() == DockDirection::Left) left.x += separated.width;
+    if (dockspace.direction() == DockDirection::Right) separated.x += left.width;
+    if (dockspace.direction() == DockDirection::Top) left.y += separated.height;
+    if (dockspace.direction() == DockDirection::Bottom) separated.y += left.height;
+    updateDockspace(dockspace.separated(), separated);
+    updateDockspace(dockspace.left(), left);
+    if (!dockspace.separated().isSplited() && !dockspace.separated().isDocked() && !dockspace.left().isSplited() && !dockspace.left().isDocked()) dockspace.reset();
+  } else if (dockspace.isDocked()) {
+    popups.callOptional(dockspace.popup(), [&rect, &dockspace](Popup& popup) {
+      dockspace.rect(rect);
+      popup.dockspace = &dockspace;
+      popup.position = rect.position();
+    });
+  } else if (s_ShowDockspace) {
+    if (mouseFocus && (mouseFocus->draggingX || mouseFocus->draggingY)) {
+      const Rect<int32_t> center = Rect<int32_t>(rect.center() - 50, 50 * 2);
+      const Rect<int32_t> left = Rect<int32_t>(center.position() - vec2i(center.width, 0), center.size() / vec2i(2, 1));
+      const Rect<int32_t> right = Rect<int32_t>(center.position() + vec2i(center.width * 3 / 2, 0), center.size() / vec2i(2, 1));
+      const Rect<int32_t> top = Rect<int32_t>(center.position() - vec2i(0, center.height), center.size() / vec2i(1, 2));
+      const Rect<int32_t> bottom = Rect<int32_t>(center.position() + vec2i(0, center.height * 3 / 2), center.size() / vec2i(1, 2));
+      getTarget().fillRect(center, MvColor::blue);
+      getTarget().fillRect(left, MvColor::blue);
+      getTarget().fillRect(right, MvColor::blue);
+      getTarget().fillRect(top, MvColor::blue);
+      getTarget().fillRect(bottom, MvColor::blue);
+      if (Mova::isMouseButtonReleased(Mova::MouseLeft)) {
+        if (center.contains(window->getMousePosition())) dockspace.dock(mouseFocusID);
+        if (left.contains(window->getMousePosition())) dockspace.split(DockDirection::Left, 0.2).dock(mouseFocusID);
+        if (right.contains(window->getMousePosition())) dockspace.split(DockDirection::Right, 0.2).dock(mouseFocusID);
+        if (top.contains(window->getMousePosition())) dockspace.split(DockDirection::Top, 0.2).dock(mouseFocusID);
+        if (bottom.contains(window->getMousePosition())) dockspace.split(DockDirection::Bottom, 0.2).dock(mouseFocusID);
+      }
+    }
+  }
 
-//   // * Update
-//   if (data.resizingW) data.rect.width = Math::max(data.rect.width + Mova::getMouseDeltaX(), style.contentPadding.x * 2);
-//   if (data.resizingH) data.rect.height = Math::max(data.rect.height + Mova::getMouseDeltaY(), style.contentPadding.y * 2 + titleBar.height);
-//   if (data.dragging) {
-//     data.rect += Mova::getMouseDelta();
-//     data.rect.y = Math::max(data.rect.y, Math::min(-titleBar.height + 3, 0));
-//   }
+  if (!dockspace.isSplited() && !dockspace.isDocked()) {
+    if (rect.area() > emptyDockspaceRect.area()) emptyDockspaceRect = rect;
+  }
+}
 
-//   // * Update mouse
-//   { // Move
-//     Rect<int32_t> moveRect = data.rect;
-//     if (flags & PopupFlags::MoveByTitleBarOnly) moveRect = titleBar;
-//     else moveRect.width -= style.windowResizeZone / 2, moveRect.height -= style.windowResizeZone / 2;
-//     if (moveRect.contains(window->getMousePosition()) && Mova::isMouseButtonPressed(Mova::MouseLeft)) data.dragging = true;
-//   }
-//   if (Mova::isMouseButtonPressed(Mova::MouseLeft) && !(flags & PopupFlags::NoResize)) { // Resize
-//     Rect<int32_t> widthRect = data.rect;
-//     widthRect.x += widthRect.width - style.windowResizeZone / 2, widthRect.width = style.windowResizeZone;
-//     Rect<int32_t> heightRect = data.rect;
-//     heightRect.y += heightRect.height - style.windowResizeZone / 2, heightRect.height = style.windowResizeZone;
-//     if (widthRect.contains(window->getMousePosition())) data.resizingW = true;
-//     if (heightRect.contains(window->getMousePosition())) data.resizingH = true;
-//   }
-//   if (Mova::isMouseButtonReleased(Mova::MouseLeft)) data.dragging = data.resizingW = data.resizingH = false;
-
-//   // * Docking
-//   if (data.dockState.direction != DockDirection::None) {
-//     popStyle(style.windowRounding);
-//     if (data.dragging && Mova::getMouseDelta() != 0) UndockPopup(data);
-//   }
-// }
-
-// void End() {
-//   MV_ASSERT(!popupStack.empty(), "Mismatch Begin/End!");
-
-//   // offset -= popupStack.top().offset;
-//   origin = popupStack.top().origin;
-//   widget.rect = popupStack.top().rect;
-//   popupStack.pop();
-// }
-
-// void DockPopup(PopupData& data, float size, DockDirection direction) {
-//   data.dockState.direction = direction;
-//   data.dockState.size = size;
-//   // if (std::find(dockList.begin(), dockList.end(), &data) == dockList.end()) dockList.push_back(&data);
-// }
-
-// void UndockPopup(PopupData& data) {
-//   data.dockState.direction = DockDirection::None;
-//   // auto it = std::find(dockList.begin(), dockList.end(), &data);
-//   // if (it != dockList.end()) dockList.erase(it);
-// }
-
-// void Dockspace() { // TODO:!!!
-//   //
-// }
-#pragma endregion Popup
+/**
+ * @brief Get the empty part of the dockspace
+ *
+ * @return VectorMath::Rect<uint32_t> the empty part of the dockspace
+ */
+Rect<uint32_t> getEmptyDockspace() { return emptyDockspaceRect; }
+#pragma endregion Dockspace
 #pragma region Service
-
 /**
  * @brief Get the current style
  *
@@ -198,11 +455,24 @@ void widget(std::string_view text) { widget(drawTextTL(text)); }
 Style& getStyle() { return style; }
 
 /**
+ * @brief Get the draw target. Mostly window, but image when draw to the popup
+ *
+ * @return MvImage& The target image itself
+ */
+MvImage& getTarget() {
+  MV_ASSERT(target, "No target is set!");
+  return *target;
+}
+
+/**
  * @brief Get the current window
  *
  * @return MvWindow& The window itself
  */
-MvWindow& getWindow() { return *window; }
+MvWindow& getWindow() {
+  MV_ASSERT(window, "No window is set!");
+  return *window;
+}
 
 /**
  * @brief Set the current window, all drawment will be done to it
@@ -210,7 +480,7 @@ MvWindow& getWindow() { return *window; }
  * @param newWindow The window itself
  */
 void setWindow(MvWindow& newWindow) {
-  MvGui::window = &newWindow;
+  target = window = &newWindow;
   home();
 }
 
@@ -219,8 +489,54 @@ void setWindow(MvWindow& newWindow) {
  *
  */
 void newFrame() {
-  // MV_ASSERT(popupStack.empty(), "Mismatch Begin/End!");
+  mouseFocus = nullptr;
+  mouseFocusID = "";
+  for (const auto& entry : popups) {
+    if (entry->second.dockspace) continue;
+    auto& popup = entry->second;
+    if (Rect<int32_t>(popup.position, popup.image.size()).contains(window->getMousePosition())) {
+      mouseFocus = &popup;
+      mouseFocusID = entry->first;
+      break;
+    }
+  }
+  if (!mouseFocus) {
+    for (const auto& entry : popups) {
+      if (!entry->second.dockspace) continue;
+      if (entry->second.dockspace->rect().contains(window->getMousePosition())) {
+        mouseFocus = &entry->second;
+        mouseFocusID = entry->first;
+        break;
+      }
+    }
+  }
+
+  std::vector<std::string> toRemove;
+  for (const auto& entry : popups) {
+    auto& popup = entry->second;
+    if (!popup.updated) {
+      toRemove.push_back(entry->first);
+      continue;
+    }
+    popup.dockspace = nullptr;
+    popup.updated = false;
+  }
+  for (const auto& id : toRemove) popups.erase(id);
+  emptyDockspaceRect = Rect<uint32_t>::zero;
+  updateDockspace(dockspace, Rect<uint32_t>(0, window->size()));
   home();
+}
+
+/**
+ * @brief Must be called after any other function every frame
+ *
+ */
+void endFrame() {
+  MV_ASSERT(!currentPopup, "Mismatch Begin/End!");
+  std::for_each(popups.rbegin(), popups.rend(), [](const auto& entry) {
+    const auto& popup = entry->second;
+    if (!popup.dockspace) getTarget().fastDrawImage(popup.image, popup.position);
+  });
 }
 
 #pragma endregion Service
@@ -281,7 +597,7 @@ void popStyle(VectorMath::vec2u& style) {
 void popStyle(uint8_t& style) {
   MV_ASSERT(!styleStackU8.empty(), "Mismatch pushStyle/popStyle");
   style = styleStackU8.top();
-  styleStackV2u.pop();
+  styleStackU8.pop();
 }
 
 /**
@@ -292,7 +608,7 @@ void popStyle(uint8_t& style) {
 void popStyle(MvColor& style) {
   MV_ASSERT(!styleStackColor.empty(), "Mismatch pushStyle/popStyle");
   style = styleStackColor.top();
-  styleStackV2u.pop();
+  styleStackColor.pop();
 }
 #pragma endregion Style
 #pragma region Cursor
@@ -316,6 +632,20 @@ void setCursor(VectorMath::vec2i cursor) {
 void setCursor(int32_t x, int32_t y) { setCursor(VectorMath::vec2i(x, y)); }
 
 /**
+ * @brief Get the cursor
+ *
+ * @return vec2i The cursor itself
+ */
+vec2i getCursor() { return origin.cursor; }
+
+/**
+ * @brief Get the content region, that is available
+ *
+ * @return vec2u The size of the region
+ */
+vec2u getContentRegionAvailable() { return getTarget().getViewport().size() - style.contentPadding * 2 - vec2u(0, origin.cursor.y); }
+
+/**
  * @brief Homes the cursor to top-left
  *
  */
@@ -334,9 +664,10 @@ void sameLine() { origin.cursor = origin.samelineCursor, origin.lineHeight = ori
 void newLine() {
   origin.samelineCursor = origin.cursor;
   origin.samelineLineHeight = origin.lineHeight;
+  if (origin.lineHeight == 0) origin.lineHeight = window->getFont().height() + style.framePadding.y * 2;
   origin.cursor.x = style.contentPadding.x;
   origin.cursor.y += origin.lineHeight + style.contentPadding.y;
-  origin.lineHeight = window->getFont().height() + style.framePadding.y * 2;
+  origin.lineHeight = 0;
 }
 
 #pragma endregion Cursor
@@ -350,26 +681,46 @@ void newLine() {
 void TextUnformatted(std::string_view text) { widget(text); }
 
 /**
+ * @brief Simple separator widget
+ *
+ */
+void Separator() {
+  widgetShrank(getTarget().getViewport().width - style.contentPadding.x * 2, style.separatorThickness);
+  getTarget().fillRect(getWidgetRectViewportRelative().position(), getWidgetRectViewportRelative().size(), style.separatorColor);
+}
+
+/**
  * @brief Simple button widget
  *
  * @param text Text on the button
  */
-void Button(std::string_view text) {
+bool Button(std::string_view text) {
   widget(window->getTextSize(text));
 
   MvColor color = style.buttonColor;
-  if (widgetState.rect.contains(window->getMousePosition())) {
+  if (isWidgetHovered()) {
     if (Mova::isMouseButtonHeld(Mova::MouseLeft)) color = style.buttonActiveColor;
     else color = style.buttonHoverColor;
   }
 
-  window->fillRoundRect(widgetState.rect, color, style.widgetRounding);
-  drawTextTL(widgetState.rect.position(), text);
+  getTarget().fillRoundRect(getWidgetRectViewportRelative(), color, style.widgetRounding);
+  drawTextTL(getWidgetRectViewportRelative().position(), text);
+  return isWidgetReleased();
+}
+
+bool Switch(bool& value) {
+  const uint32_t unit = getTarget().getFont().height();
+  widget(vec2u(2, 1) * unit - style.framePadding * 2);
+  getTarget().fillRoundRect(getWidgetRectViewportRelative(), style.buttonColor, style.widgetRounding);
+  getTarget().fillRoundRect(getWidgetRectViewportRelative().position() + vec2u(unit, 0) * value, unit, style.buttonHoverColor, style.widgetRounding);
+
+  if (isWidgetPressed()) value = !value;
+  return isWidgetPressed();
 }
 #pragma endregion SimpleWidgets
 #pragma region TextInput
 
-namespace TextInputInternal {
+namespace TextInputInternal { // TODO: rework
 // * Get next cursor position when moving in direction direction, account for Ctrl
 static uint32_t getNextCursorPosition(TextInputState& state, int8_t direction) {
   auto checkBounds = [&state](uint32_t cursor, int8_t direction) -> bool {
@@ -400,10 +751,27 @@ static uint32_t eraseRegion(TextInputState& state, int8_t direction) {
     eraseSelection(state);
     return state.cursor;
   }
-  uint32_t newCursor = getNextCursorPosition(state, direction);
+  const uint32_t newCursor = getNextCursorPosition(state, direction);
   if (direction < 0) state.text.erase(newCursor, state.cursor - newCursor);
   else state.text.erase(state.cursor, newCursor - state.cursor);
   return newCursor;
+}
+
+// * Filter
+void filter(std::string& text, TextInputType type) {
+  if (type == TextInputType::Integer) {
+    text.erase(std::remove_if(text.begin(), text.end(),
+                   [](char c) {
+                     return !std::isdigit(c);
+                   }),
+        text.end());
+  } else if (type == TextInputType::Decimal) {
+    text.erase(std::remove_if(text.begin(), text.end(),
+                   [](char c) {
+                     return !std::isdigit(c) && c != '.';
+                   }),
+        text.end());
+  }
 }
 } // namespace TextInputInternal
 
@@ -426,12 +794,12 @@ bool TextInput(TextInputState& state, TextInputType type) { // TODO: multiline, 
   }
 
   widget(VectorMath::max(window->getTextSize(state.text), vec2u(style.minimumInputWidth, window->getFont().height())));
-  window->fillRoundRect(widgetState.rect, style.inputBackground, style.widgetRounding);
+  window->fillRoundRect(getWidgetRectViewportRelative(), style.inputBackground, style.widgetRounding);
 
   // * Check for mouse moving text cursor
   bool moveCursor = false;
   if (Mova::isMouseButtonHeld(Mova::MouseLeft)) {
-    if (widgetState.rect.contains(window->getMousePosition())) {
+    if (isWidgetHovered()) {
       moveCursor = true;
       state.cursorBlinkTimer = 0;
     } else if (Mova::isMouseButtonPressed(Mova::MouseLeft)) state.cursor = state.selectionStart = UINT32_MAX;
@@ -439,11 +807,11 @@ bool TextInput(TextInputState& state, TextInputType type) { // TODO: multiline, 
 
   // * Draw text
   std::wstring wtext = utf8_to_ws(state.text);
-  vec2i charPos = widgetState.rect.position() + style.framePadding, textBarPos = 0, selectionStartPos = 0;
+  vec2i charPos = getWidgetRect().position() + style.framePadding, textBarPos = 0, selectionStartPos = 0;
   bool clickBarFound = !moveCursor;
 
   for (uint32_t i = 0; i < wtext.size(); i++) {
-    vec2u size = window->drawChar(charPos + vec2u(0, window->getFont().ascent()), wtext[i], style.foregroundColor);
+    const vec2u size = window->drawChar(charPos + vec2u(0, window->getFont().ascent()) - (currentPopup ? currentPopup->position : 0), wtext[i], style.foregroundColor);
 
     if (i == state.cursor) textBarPos = charPos;
     if (i == state.selectionStart) selectionStartPos = charPos;
@@ -486,6 +854,7 @@ bool TextInput(TextInputState& state, TextInputType type) { // TODO: multiline, 
     std::string typedText = Mova::getTextTyped();
     if (!typedText.empty()) {
       if (state.selectionStart != state.cursor) eraseSelection(state);
+      filter(typedText, type);
       state.text.insert(state.cursor, typedText);
       state.selectionStart = state.cursor += typedText.length();
       valueChanged = true;
@@ -507,11 +876,25 @@ bool TextInput(TextInputState& state, TextInputType type) { // TODO: multiline, 
 VectorMath::Rect<int32_t> getWidgetRect() { return widgetState.rect; }
 
 /**
+ * @brief Get the rect of the last widget relative to the target image
+ *
+ * @return VectorMath::Rect<int32_t> The rect itself
+ */
+VectorMath::Rect<int32_t> getWidgetRectTargetRelative() { return widgetState.targetRect; }
+
+/**
+ * @brief Get the rect of the last widget relative to the target viewport
+ *
+ * @return VectorMath::Rect<int32_t> The rect itself
+ */
+VectorMath::Rect<int32_t> getWidgetRectViewportRelative() { return widgetState.viewportRect; }
+
+/**
  * @brief Check if the last widget hovered
  *
  * @return Is the last widget hovered?
  */
-bool isWidgetHovered() { return getWidgetRect().contains(getWindow().getMousePosition()); }
+bool isWidgetHovered() { return currentPopup == mouseFocus && getWidgetRect().contains(getWindow().getMousePosition()); }
 
 /**
  * @brief Check if the last widget pressed
@@ -520,5 +903,11 @@ bool isWidgetHovered() { return getWidgetRect().contains(getWindow().getMousePos
  */
 bool isWidgetPressed() { return isWidgetHovered() && Mova::isMouseButtonPressed(Mova::MouseLeft); }
 
+/**
+ * @brief Check if the last widget released
+ *
+ * @return Is the last widget released?
+ */
+bool isWidgetReleased() { return isWidgetHovered() && Mova::isMouseButtonReleased(Mova::MouseLeft); }
 #pragma endregion Interaction
 } // namespace MvGui

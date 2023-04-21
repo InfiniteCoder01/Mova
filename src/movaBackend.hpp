@@ -50,6 +50,7 @@ bool isKeyRepeated(Key key);
 
 std::string getTextTyped();
 
+void copyToClipboard(std::string_view text);
 float deltaTime();
 void nextFrame();
 

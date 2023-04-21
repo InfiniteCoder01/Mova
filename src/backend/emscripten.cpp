@@ -83,7 +83,7 @@ static EM_BOOL keyCallback(int eventType, const EmscriptenKeyboardEvent* event, 
     if (event->repeated) pressState = PressState::Repeated;
     else pressState = PressState::Pressed;
   } else pressState = PressState::Rekeased;
-  // TODO:text input!
+  // TODO: text input!
   _keyEvent(keyMap[std::string(event->code)], pressState, "");
   return EM_FALSE;
 }

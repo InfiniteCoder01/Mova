@@ -23,27 +23,28 @@ int main() {
     MvGui::Button("Debug " ICON_FA_BUG);
 
     static bool popup = false;
-    if (MvGui::isWidgetPressed()) popup = !popup;
+    if (MvGui::isWidgetPressed()) {
+      popup = !popup;
+    }
 
-    MvGui::Button("Dock " ICON_FA_WINDOW_RESTORE);
-
-    // static MvGuiPopupData data;
-    // static MvGuiPopupData data2;
-    // if (MvGui::isWidgetPressed()) {
-    //   MvGui::DockPopup(data);
-    //   MvGui::DockPopup(data2);
-    // }
-    // if (popup) {
-    //   MvGui::Begin(data, "Debugger", MvGuiPopupFlags::TitleBar | MvGuiPopupFlags::MoveByTitleBarOnly);
-    //   MvGui::Button("Test");
-    //   if (MvGui::isWidgetPressed()) MvGui::UndockPopup(data);
-    //   MvGui::End();
-
-    //   MvGui::Begin(data2, "Another popup");
-    //   MvGui::End();
-    // }
     static MvGuiTextInputState state;
     MvGui::TextInput(state);
+
+    if (popup) {
+      MvGui::Begin("Window");
+      MvGui::Button("Dock " ICON_FA_WINDOW_RESTORE);
+      if (MvGui::isWidgetPressed()) {
+        auto& dockspace = MvGui::getDockspace();
+        const bool dock = !dockspace.isSplited();
+        dockspace.reset();
+        if (dock) dockspace.split(MvGuiDockDirection::Left, 0.2).dock("Window"); // TODO: not works
+      }
+      MvGui::End();
+      MvGui::Begin("Window2");
+      MvGui::End();
+    }
+
+    MvGui::endFrame();
     Mova::nextFrame();
   }
   return 0;

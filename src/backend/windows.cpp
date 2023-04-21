@@ -40,6 +40,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
     case WM_MOUSEMOVE:
       _mouseMove(LOWORD(lParam), HIWORD(lParam));
+      if (isMouseButtonHeld(MouseLeft) != ((wParam & MK_LBUTTON) != 0)) _mouseButton(MouseLeft, (wParam & MK_LBUTTON) != 0);
+      if (isMouseButtonHeld(MouseMiddle) != ((wParam & MK_MBUTTON) != 0)) _mouseButton(MouseMiddle, (wParam & MK_MBUTTON) != 0);
+      if (isMouseButtonHeld(MouseRight) != ((wParam & MK_RBUTTON) != 0)) _mouseButton(MouseRight, (wParam & MK_RBUTTON) != 0);
       return true;
 
     case WM_LBUTTONDOWN:
@@ -90,6 +93,16 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 #pragma endregion Callback
 #pragma region NextFrame
+void copyToClipboard(std::string_view text) {
+  HGLOBAL hMem =  GlobalAlloc(GMEM_MOVEABLE, text.length() + 1);
+  memcpy(GlobalLock(hMem), std::string(text).c_str(), text.length() + 1);
+  GlobalUnlock(hMem);
+  OpenClipboard(0);
+  EmptyClipboard();
+  SetClipboardData(CF_TEXT, hMem);
+  CloseClipboard();
+}
+
 void _nextFrame() {
   MSG msg;
   if(PeekMessage(&msg, nullptr, 0, 0, true)) {

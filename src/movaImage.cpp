@@ -38,13 +38,13 @@ Color Color::hsv(uint16_t hue, uint8_t saturation, uint8_t value, uint8_t alpha)
 }
 
 #pragma region Font
-Font::Font(const std::map<std::string_view, std::vector<Range>>& fonts, uint32_t lineHeight) : m_Height(lineHeight) {
+Font::Font(const std::map<std::filesystem::path, std::vector<Range>>& fonts, uint32_t lineHeight) : m_Height(lineHeight) {
   stbtt_pack_context packContext = {};
   MV_ASSERT(stbtt_PackBegin(&packContext, /*buffer, width, height*/ nullptr, 0xffff, 0xffff, 0, 1, nullptr), "Failed to begin font packing!");
   { // Prepare ranges
     m_Ranges.clear();
     uint32_t totalRanges = 0;
-    for (auto& [_, ranges] : fonts) {
+    for (const auto& [_, ranges] : fonts) {
       totalRanges += ranges.size();
     }
     m_Ranges.reserve(totalRanges);
@@ -67,9 +67,9 @@ Font::Font(const std::map<std::string_view, std::vector<Range>>& fonts, uint32_t
     auto& [info, databuffer, rangeOffset, rangeCount, rectOffset] = *datas.rbegin();
 
     // Read file
-    std::ifstream infile(path.data());
+    std::ifstream infile(path.string().c_str());
     infile.seekg(0, std::ios::end);
-    size_t length = infile.tellg();
+    const size_t length = infile.tellg();
     infile.seekg(0, std::ios::beg);
     databuffer = new uint8_t[length];
     infile.read((char*)databuffer, static_cast<std::streamsize>(length));
@@ -170,23 +170,37 @@ Image::Image(uint32_t width, uint32_t height, const uint8_t* data) : m_Width(wid
   m_Data = new uint8_t[width * height * 4];
   if (data) std::copy(data, data + width * height * sizeof(uint32_t), m_Data);
   else std::fill(m_Data, m_Data + width * height * sizeof(uint32_t), Color::transperent.value);
+  m_Viewport = VectorMath::Rect<uint32_t>(0, size());
 }
 
-Image::Image(std::string_view path) {
+Image::Image(const std::filesystem::path& path) {
   int x = 0, y = 0, n = 0;
-  unsigned char* data = ::stbi_load(std::string(path).c_str(), &x, &y, &n, 4);
-  MV_ASSERT(data, "Could not load image: %s", std::string(path).c_str());
+  unsigned char* data = ::stbi_load(path.string().c_str(), &x, &y, &n, 4);
+  MV_ASSERT(data, "Could not load image: %s", path.string().c_str());
   m_Data = new uint8_t[x * y * 4];
-  std::copy(data, data + x * y * sizeof(uint32_t), m_Data);
+  std::copy(data, data + x * y * 4, m_Data);
   ::stbi_image_free(reinterpret_cast<void*>(data));
+  m_Width = x;
+  m_Height = y;
+  m_Viewport = VectorMath::Rect<uint32_t>(0, size());
 }
 
 void Image::setSize(uint32_t width, uint32_t height) {
   if (width == m_Width && height == m_Height) return;
+  MV_ASSERT(width > 0 && height > 0, "Invalid image size: %ux%u", width, height);
+  delete[] m_Data;
+  m_Data = new uint8_t[width * height * 4];
+  m_Width = width;
+  m_Height = height;
+  m_Viewport = VectorMath::Rect<uint32_t>(0, size());
+}
+
+void Image::resize(uint32_t width, uint32_t height) {
+  if (width == m_Width && height == m_Height) return;
   MV_ASSERT(width > 0 && height > 0, "Invalid image size: %u%%%u", width, height);
   uint8_t* newData = new uint8_t[width * height * 4];
   if (m_Data) {
-    uint32_t minW = Math::min(m_Width, width), minH = Math::min(m_Height, height);
+    const uint32_t minW = Math::min(m_Width, width), minH = Math::min(m_Height, height);
     for (uint32_t x = 0; x < minW; x++) {
       for (uint32_t y = 0; y < minH; y++) {
         reinterpret_cast<uint32_t*>(newData)[x + y * width] = reinterpret_cast<uint32_t*>(m_Data)[x + y * m_Width];
@@ -197,43 +211,53 @@ void Image::setSize(uint32_t width, uint32_t height) {
   m_Width = width;
   m_Height = height;
   m_Data = newData;
+  m_Viewport = VectorMath::Rect<uint32_t>(0, size());
+}
+
+void Image::setViewport(VectorMath::Rect<uint32_t> viewport) {
+  m_Viewport = viewport;
+  if (m_Viewport.x >= m_Width) m_Viewport.x = m_Width - 1;
+  if (m_Viewport.y >= m_Height) m_Viewport.y = m_Height - 1;
+  if (m_Viewport.right() > m_Width) m_Viewport.width = m_Width - m_Viewport.x;
+  if (m_Viewport.bottom() > m_Height) m_Viewport.height = m_Height - m_Viewport.y;
 }
 
 #pragma endregion ImageCanvas
 #pragma region DrawPixel
 void Image::setPixel(int32_t x, int32_t y, Color color) {
   MV_ASSERT(m_Data, "Cannot set pixel: Image data is null!");
-  if (!Math::inRange<int32_t>(x, 0, m_Width) || !Math::inRange<int32_t>(y, 0, m_Height)) return;
+  if (x < 0 || y < 0 || x >= m_Viewport.width || y >= m_Viewport.height) return;
   set(x, y, color);
 }
 
 Color Image::getPixel(int32_t x, int32_t y) const {
   MV_ASSERT(m_Data, "Cannot get pixel: Image data is null!");
-  if (!Math::inRange<int32_t>(x, 0, m_Width) || !Math::inRange<int32_t>(y, 0, m_Height)) return Color::transperent;
+  if (x < 0 || y < 0 || x >= m_Viewport.width || y >= m_Viewport.height) return Color::transperent;
   return get(x, y);
 }
 #pragma endregion DrawPixel
 #pragma region Draw
-static Color alphaBlend(Color a, Color b) {
-  b.r = Math::lerp(a.r, b.r, b.a / 255.f);
-  b.g = Math::lerp(a.g, b.g, b.a / 255.f);
-  b.b = Math::lerp(a.b, b.b, b.a / 255.f);
-  return b;
+inline Color alphaBlend(Color a, Color b) {
+  a.r = Math::lerp255(a.r, b.r, b.a);
+  a.g = Math::lerp255(a.g, b.g, b.a);
+  a.b = Math::lerp255(a.b, b.b, b.a);
+  a.a = Math::max(a.a, b.a);
+  return a;
 }
 
 void Image::fillRect(int32_t x, int32_t y, int32_t width, int32_t height, Color color) {
   MV_ASSERT(m_Data, "Cannot fill: Image data is null!");
-  if (x + width <= 0 || y + height <= 0 || x > static_cast<int32_t>(m_Width) || y > static_cast<int32_t>(m_Height)) return;
+  if (x + width < 0 || y + height < 0 || x > static_cast<int32_t>(m_Viewport.width) || y > static_cast<int32_t>(m_Viewport.height)) return;
   if (width < 0) x += width, width = -width;
   if (height < 0) y += height, height = -height;
   if (x < 0) width += x, x = 0;
   if (y < 0) height += y, y = 0;
-  if (x + width > m_Width) width = m_Width - x;
-  if (y + height > m_Height) height = m_Height - y;
+  if (x + width > m_Viewport.width) width = m_Viewport.width - x;
+  if (y + height > m_Viewport.height) height = m_Viewport.height - y;
   if (color.a == 255) {
-    uint32_t c = colorMode(color);
+    const uint32_t c = m_ColorMode(color);
     for (uint32_t y1 = 0; y1 < height; y1++) {
-      uint32_t* lineStart = reinterpret_cast<uint32_t*>(m_Data) + x + (y + y1) * m_Width;
+      uint32_t* lineStart = reinterpret_cast<uint32_t*>(m_Data) + x + m_Viewport.x + (y + y1 + m_Viewport.y) * m_Width;
       std::fill(lineStart, lineStart + width, c);
     }
     return;
@@ -248,18 +272,18 @@ void Image::fillRect(int32_t x, int32_t y, int32_t width, int32_t height, Color 
 void Image::drawRect(int32_t x, int32_t y, int32_t width, int32_t height, Color color, uint8_t thickness) {
   MV_ASSERT(m_Data, "Cannot drawRect: Image data is null!");
   fillRect(x, y, width, thickness, color);
-  fillRect(x, y + height - thickness / 2, width, thickness, color);
+  fillRect(x, y + height - thickness, width, thickness, color);
   fillRect(x, y, thickness, height, color);
-  fillRect(x + width - thickness / 2, y, thickness, height, color);
+  fillRect(x + width - thickness, y, thickness, height, color);
 }
 
-void Image::fillRoundRect(int32_t x, int32_t y, int32_t width, int32_t height, Color color, uint8_t rtl, uint8_t rtr, uint8_t rbl, uint8_t rbr) {
+void Image::fillRoundRect(int32_t x, int32_t y, int32_t width, int32_t height, Color color, uint8_t rtl, uint8_t rtr, uint8_t rbl, uint8_t rbr) { // TODO: optimize
   MV_ASSERT(m_Data, "Cannot fill: Image data is null!");
-  if (x + width <= 0 || y + height <= 0 || x > static_cast<int32_t>(m_Width) || y > static_cast<int32_t>(m_Height)) return;
+  if (x + width < 0 || y + height < 0 || x > static_cast<int32_t>(m_Viewport.width) || y > static_cast<int32_t>(m_Viewport.height)) return;
   if (width < 0) x += width, width = -width;
   if (height < 0) y += height, height = -height;
-  for (uint32_t y1 = Math::max(0, -y); y1 < Math::min(height, static_cast<int32_t>(m_Height) - y); y1++) {
-    for (uint32_t x1 = Math::max(0, -x); x1 < Math::min(width, static_cast<int32_t>(m_Width) - x); x1++) {
+  for (uint32_t y1 = Math::max(0, -y); y1 < Math::min(height, m_Viewport.height - y); y1++) {
+    for (uint32_t x1 = Math::max(0, -x); x1 < Math::min(width, m_Viewport.width - x); x1++) {
       VectorMath::vec2i roundVector;
       uint8_t radius = 0;
       radius += rtl * (x1 <= width / 2 && y1 <= height / 2);
@@ -283,8 +307,8 @@ void Image::drawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Color color
   if (x1 == x2) fillRect(x1 - thickness / 2, y1, thickness, y2 - y1, color);
   else if (y1 == y2) fillRect(x1, y1 - thickness / 2, x2 - x1, thickness, color);
   else { // TODO: AI written, might not work, also should bound check
-    int32_t dx = x2 - x1;
-    int32_t dy = y2 - y1;
+    const int32_t dx = x2 - x1;
+    const int32_t dy = y2 - y1;
     int32_t err = dx - dy;
     int32_t e2;
     while (x1 != x2) {
@@ -302,23 +326,39 @@ void Image::drawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Color color
   }
 }
 
+void Image::fastDrawImage(const Image& image, int32_t x, int32_t y) { // TODO: optimize
+  MV_ASSERT(m_Data, "Cannot drawImage: Image data is null!");
+  MV_ASSERT(image.data(), "Cannot drawImage: Other image data is null!");
+  if (x + static_cast<int32_t>(image.width()) < 0 || y + static_cast<int32_t>(image.height()) < 0 || x > static_cast<int32_t>(m_Viewport.width) || y > static_cast<int32_t>(m_Viewport.height)) return;
+  for (uint32_t y1 = Math::max(0, -y); y1 < Math::min(image.height(), m_Viewport.height - y); y1++) {
+    for (uint32_t x1 = Math::max(0, -x); x1 < Math::min(image.width(), m_Viewport.width - x); x1++) {
+      const Color color = image.get(x1, y1);
+      if (color.a > 128) set(x + x1, y + y1, color);
+    }
+  }
+}
+
 void Image::drawImage(const Image& image, int32_t x, int32_t y, int32_t width, int32_t height, uint32_t srcX, uint32_t srcY, uint32_t srcWidth, uint32_t srcHeight) {
   MV_ASSERT(m_Data, "Cannot drawImage: Image data is null!");
   MV_ASSERT(image.data(), "Cannot drawImage: Other image data is null!");
   if (width == 0) width = image.width();
   if (height == 0) height = image.height();
-
-  if (x + Math::abs(width) <= 0 || y + Math::abs(height) <= 0 || x > static_cast<int32_t>(m_Width) || y > static_cast<int32_t>(m_Height)) return;
-
   if (srcWidth == 0) srcWidth = image.width();
   if (srcHeight == 0) srcHeight = image.height();
-  for (uint32_t y1 = Math::max(0, y); y1 < Math::min(y + Math::abs(height), m_Height); y1++) {
-    for (uint32_t x1 = Math::max(0, x); x1 < Math::min(x + Math::abs(width), m_Width); x1++) {
-      uint32_t u = (x1 - x) * srcWidth / Math::abs(width);
-      uint32_t v = (y1 - y) * srcHeight / Math::abs(height);
-      if (width < 0) u = srcWidth - u - 1;
-      if (height < 0) v = srcHeight - v - 1;
-      set(x1, y1, alphaBlend(get(x1, y1), image.get(u + srcX, v + srcY)));
+
+  if (x + width < 0 || y + height < 0 || x > static_cast<int32_t>(m_Viewport.width) || y > static_cast<int32_t>(m_Viewport.height)) return;
+
+  int32_t mapX = srcWidth, mapY = srcHeight;
+  if (width < 0) mapX = -static_cast<int32_t>(srcWidth), width = -width;
+  if (height < 0) mapY = -static_cast<int32_t>(srcHeight), height = -height;
+
+  uint32_t isx = Math::max(0, -x), isy = Math::max(0, -y);
+  uint32_t iex = Math::min(width, m_Viewport.width - x), iey = Math::min(height, m_Viewport.height - y);
+  for (uint32_t y1 = isy; y1 < iey; y1++) {
+    uint32_t v = static_cast<int32_t>(y1) * mapY / height;
+    for (uint32_t x1 = isx; x1 < iex; x1++) {
+      uint32_t u = static_cast<int32_t>(x1) * mapX / width;
+      set(x + x1, y + y1, alphaBlend(get(x + x1, y + y1), image.get(u + srcX, v + srcY)));
     }
   }
 }
@@ -330,25 +370,25 @@ static std::wstring utf8_to_ws(const std::string& utf8) {
   return s;
 }
 
-VectorMath::vec2u Image::drawText(int32_t x, int32_t y, std::string_view text, Color color) {
-  MV_ASSERT(font, "No font is set!");
+VectorMath::vec2u Image::drawText(int32_t x, int32_t y, std::string_view text, Color color) { // TODO: optimize, use drawChar
+  MV_ASSERT(m_Font, "No font is set!");
   MV_ASSERT(m_Data, "Cannot drawText: Image data is null!");
 
   float characterX = x, characterY = y;
-  VectorMath::vec2u size = VectorMath::vec2u(0, font->height());
+  VectorMath::vec2u size = VectorMath::vec2u(0, m_Font->height());
   std::wstring wtext = utf8_to_ws(std::string(text));
   for (wchar_t ch : wtext) {
     stbtt_aligned_quad quad = {};
-    font->getQuadFromCodepoint(ch, characterX, characterY, quad);
+    m_Font->getQuadFromCodepoint(ch, characterX, characterY, quad);
     if (ch == '\r' || ch == '\n') size.x = Math::max(size.x, characterX - x), characterX = x;
-    if (ch == '\n') size.y += font->height(), characterY += font->height();
+    if (ch == '\n') size.y += m_Font->height(), characterY += m_Font->height();
 
     for (uint32_t y1 = quad.y0; y1 < quad.y1; y1++) {
       for (uint32_t x1 = quad.x0; x1 < quad.x1; x1++) {
         uint32_t u = (x1 - quad.x0) * (quad.s1 - quad.s0) / (quad.x1 - quad.x0) + quad.s0;
         uint32_t v = (y1 - quad.y0) * (quad.t1 - quad.t0) / (quad.y1 - quad.y0) + quad.t0;
         Color c = color;
-        c.a = c.a * font->atlas[u + v * font->atlasSize.x] / 255;
+        c.a = c.a * m_Font->atlas[u + v * m_Font->atlasSize.x] / 255;
         setPixel(x1, y1, alphaBlend(getPixel(x1, y1), c));
       }
     }
@@ -358,14 +398,14 @@ VectorMath::vec2u Image::drawText(int32_t x, int32_t y, std::string_view text, C
   return size;
 }
 
-VectorMath::vec2u Image::drawChar(int32_t x, int32_t y, wchar_t character, Color color) {
-  MV_ASSERT(font, "No font is set!");
+VectorMath::vec2u Image::drawChar(int32_t x, int32_t y, wchar_t character, Color color) { // TODO: optimize, don't use setPixel & getPixel, use clipping
+  MV_ASSERT(m_Font, "No font is set!");
   MV_ASSERT(m_Data, "Cannot drawText: Image data is null!");
   float characterX = x, characterY = y;
 
   VectorMath::vec2u size = 0;
   stbtt_aligned_quad quad = {};
-  font->getQuadFromCodepoint(character, characterX, characterY, quad);
+  m_Font->getQuadFromCodepoint(character, characterX, characterY, quad);
   size.x = characterX - x;
   size.y = Math::max(size.y, quad.y1 - quad.y0);
   for (uint32_t y1 = quad.y0; y1 < quad.y1; y1++) {
@@ -373,7 +413,7 @@ VectorMath::vec2u Image::drawChar(int32_t x, int32_t y, wchar_t character, Color
       uint32_t u = (x1 - quad.x0) * (quad.s1 - quad.s0) / (quad.x1 - quad.x0) + quad.s0;
       uint32_t v = (y1 - quad.y0) * (quad.t1 - quad.t0) / (quad.y1 - quad.y0) + quad.t0;
       Color c = color;
-      c.a = c.a * font->atlas[u + v * font->atlasSize.x] / 255;
+      c.a = c.a * m_Font->atlas[u + v * m_Font->atlasSize.x] / 255;
       setPixel(x1, y1, alphaBlend(getPixel(x1, y1), c));
     }
   }
@@ -381,17 +421,17 @@ VectorMath::vec2u Image::drawChar(int32_t x, int32_t y, wchar_t character, Color
 }
 
 VectorMath::vec2u Image::getTextSize(std::string_view text) {
-  MV_ASSERT(font, "No font is set!");
+  MV_ASSERT(m_Font, "No font is set!");
 
-  VectorMath::vec2u size = VectorMath::vec2u(0, font->height());
+  VectorMath::vec2u size = VectorMath::vec2u(0, m_Font->height());
   std::wstring wtext = utf8_to_ws(std::string(text));
   float width = 0;
   for (wchar_t& ch : wtext) {
     stbtt_aligned_quad quad = {};
     float unusedY = 0;
-    font->getQuadFromCodepoint(ch, width, unusedY, quad);
+    m_Font->getQuadFromCodepoint(ch, width, unusedY, quad);
     if (ch == '\r' || ch == '\n') size.x = Math::max(size.x, width), width = 0;
-    if (ch == '\n') size.y += font->height();
+    if (ch == '\n') size.y += m_Font->height();
     width = static_cast<int>(width);
   }
   size.x = Math::max(size.x, width);

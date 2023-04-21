@@ -4,10 +4,10 @@ files "gui.cpp";
 // files "imgui.cpp";
 
 library "Mova";
-flags "-Ofast -std=c++17";
+flags "-w -Ofast -std=c++17";
 
 // For debug
-flags "-DDEBUG -fsanitize=leak -g3";
+flags "-DDEBUG -fsanitize=address -g3";
 
 // For GCC
 output "bin/test";

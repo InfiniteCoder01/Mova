@@ -167,5 +167,9 @@ VectorMath::vec2u Window::getPosition() const {
 uint32_t Window::getX() const { return getPosition().x; }
 uint32_t Window::getY() const { return getPosition().y; }
 #pragma endregion WindowAPI
+
+void copyToClipboard(std::string_view text) {
+  // TODO: Do
+}
 } // namespace Mova
 #endif

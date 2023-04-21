@@ -8,8 +8,8 @@
             "type": "by-gdb",
             "request": "launch",
             "name": "Launch(gdb)",
-            "program": "${workspaceRoot}/examples-bin/test",
-            "cwd": "${workspaceRoot}"
+            "program": "${workspaceRoot}/examples/bin/test",
+            "cwd": "${workspaceRoot}/examples"
         }
     ]
 }

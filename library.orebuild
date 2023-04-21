@@ -4,11 +4,12 @@ include "src/";
 flags "-std=c++17";
 
 // For debug
-flags "-DDEBUG -fsanitize=leak -g3";
+// flags "-w -DDEBUG -fsanitize=address -g3";
+// linkerFlags "-fsanitize=address";
 
 // For GCC
 linkerFlags "-Ofast -lX11 -lXrandr -lGL";
-library "imgui";
+// library "imgui";
 
 // For MinGW
 // linkerFlags "-O3 -lgdi32 -lopengl32 -DWIN32_LEAN_AND_MEAN";

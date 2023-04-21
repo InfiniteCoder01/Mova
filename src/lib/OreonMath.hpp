@@ -17,6 +17,17 @@
 #undef abs
 #endif
 
+#ifdef round
+#define OREON_MATH_ROUND_DEF
+#undef round
+#endif
+
+#if __cplusplus < 201300
+#define OREON_MATH_AUTO T1
+#else
+#define OREON_MATH_AUTO auto
+#endif
+
 namespace Math {
 template <typename T1, typename T2, typename T3> inline bool inRange(T1 val, T2 _min, T3 _max) { return (val >= _min) && (val < _max); }
 template <typename T1, typename T2, typename T3> inline bool inRangeW(T1 val, T2 _min, T3 size) { return inRange(val, _min, _min + size); }
@@ -24,8 +35,8 @@ template <typename T> inline int8_t sign(T val) { return (val > 0) - (val < 0); 
 template <typename T> inline T abs(T val) { return val < 0 ? -val : val; }
 inline int floor(float val) { return val < 0 ? (int)(val - 0.999999) : (int)val; }
 inline int ceil(float val) { return val < 0 ? (int)val : (int)(val + 0.999999); }
-inline int round(float val) { return val < 0 ? (int)(val - 0.5) : (int)(val + 0.5); }
-template <typename T1, typename T2> inline auto wrap(T1 val, T2 _max) {
+inline int round(float val) { return static_cast<int>(lround(val)); }
+template <typename T1, typename T2> inline OREON_MATH_AUTO wrap(T1 val, T2 _max) {
   if (val < 0) return _max - abs(val) % _max;
   return val % _max;
 }
@@ -34,16 +45,17 @@ template <typename T1, typename T2> inline T2 align(T1 val, T2 alignment) { retu
 template <typename T1, typename T2> inline T2 alignUp(T1 val, T2 alignment) { return int((val + alignment - 1) / alignment) * alignment; }
 
 template <typename T1, typename T2> inline float lerp(T1 a, T2 b, float t) { return a * (1 - t) + b * t; }
+template <typename T1, typename T2> inline float lerp255(T1 a, T2 b, uint8_t t) { return (a * (255 - t) + b * t) / 255; }
 template <typename T1, typename T2> inline void swap(T1& a, T2& b) {
   T1 temp = a;
   a = b;
   b = temp;
 }
 
-template <typename T1, typename T2> inline auto min(T1 a, T2 b) { return a < b ? a : b; }
-template <typename T1, typename T2> inline auto max(T1 a, T2 b) { return a > b ? a : b; }
-template <typename T1, typename T2, typename T3> inline auto clamp(T1 val, T2 _min, T3 _max) { return min(max(val, _min), _max); }
-template <typename T1, typename T2, typename T3> inline auto clampW(T1 val, T2 _min, T3 size) { return clamp(val, _min, _min + size); }
+template <typename T1, typename T2> inline OREON_MATH_AUTO min(T1 a, T2 b) { return a < b ? a : b; }
+template <typename T1, typename T2> inline OREON_MATH_AUTO max(T1 a, T2 b) { return a > b ? a : b; }
+template <typename T1, typename T2, typename T3> inline OREON_MATH_AUTO clamp(T1 val, T2 _min, T3 _max) { return min(max(val, _min), _max); }
+template <typename T1, typename T2, typename T3> inline OREON_MATH_AUTO clampW(T1 val, T2 _min, T3 size) { return clamp(val, _min, _min + size); }
 static float smoothstep(float _min, float _max, float t) {
   t = clamp((t - _min) / (_max - _min), 0, 1);
   return t * t * (3 - 2 * t);
@@ -211,6 +223,9 @@ template <typename T> inline vec3<T> cross(const vec3<T>& a, const vec3<T>& b) {
 template <typename T> inline vec2<T> abs(vec2<T> v) { return vec2<T>(Math::abs(v.x), Math::abs(v.y)); }
 template <typename T> inline vec3<T> abs(vec3<T> v) { return vec3<T>(Math::abs(v.x), Math::abs(v.y), Math::abs(v.z)); }
 
+template <typename T> inline vec2<int> sign(vec2<T> v) { return vec2<int>(Math::sign(v.x), Math::sign(v.y)); }
+template <typename T> inline vec3<int> sign(vec3<T> v) { return vec3<int>(Math::sign(v.x), Math::sign(v.y), Math::sign(v.z));  }
+
 inline vec2<int> floor(vec2<float> v) { return vec2<int>(Math::floor(v.x), Math::floor(v.y)); }
 inline vec3<int> floor(vec3<float> v) { return vec3<int>(Math::floor(v.x), Math::floor(v.y), Math::floor(v.z)); }
 
@@ -249,6 +264,8 @@ template <typename T> struct Rect {
   Rect(const vec2<T>& position, const vec2<T>& size) : Rect(position.x, position.y, size.x, size.y) {}
   Rect(const Rect<T>& other) : Rect(other.x, other.y, other.width, other.height) {}
 
+  static Rect<T> centered(vec2<T> center, vec2<T> size) { return Rect<T>(center - size / 2, size); }
+
   T centerX() const { return x + width / 2; }
   T centerY() const { return y + height / 2; }
 
@@ -256,7 +273,7 @@ template <typename T> struct Rect {
   vec2<T> size() const { return vec2<T>(width, height); }
   vec2<T> center() const { return position() + size() / 2; }
   T area() const { return width * height; }
-  bool empty() const { return width == 0 || height == 0; }
+  bool empty() const { return area() == 0; }
 
   T left() const { return x; }
   T right() const { return x + width; }
@@ -338,4 +355,8 @@ template <typename T> const Rect<T> Rect<T>::zero = Rect<T>(0, 0, 0, 0);
 
 #ifdef OREON_MATH_ABS_DEF
 #define abs Math::abs
+#endif
+
+#ifdef OREON_MATH_ROUND_DEF
+#define round Math::round
 #endif
