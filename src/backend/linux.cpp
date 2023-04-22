@@ -49,11 +49,11 @@ static void keyEvent(XKeyEvent& event) { // TODO(InfiniteCoder): Keys in Xlib ar
   KeySym keysym = 0;
   ::XLookupString(&event, buffer, sizeof(buffer), &keysym, nullptr);
   Key key = Key::Undefined;
-  if (Math::inRange<KeySym>(keysym, XK_A, XK_Z + 1)) key = static_cast<Key>((keysym + static_cast<KeySym>(Key::A)) - XK_A);
-  else if (Math::inRange<KeySym>(keysym, XK_a, XK_a + 1)) key = static_cast<Key>((keysym + static_cast<KeySym>(Key::A)) - XK_a);
-  else if (Math::inRange<KeySym>(keysym, XK_0, XK_9 + 1)) key = static_cast<Key>((keysym + static_cast<KeySym>(Key::Key0)) - XK_0);
-  else if (Math::inRange<KeySym>(keysym, XK_F1, XK_F12 + 1)) key = static_cast<Key>((keysym + static_cast<KeySym>(Key::F1)) - XK_F1);
-  else if (Math::inRange<KeySym>(keysym, XK_KP_0, XK_KP_9 + 1)) key = static_cast<Key>((keysym + static_cast<KeySym>(Key::Numpad0)) - XK_KP_0);
+  if (Math::inRange<KeySym>(keysym, XK_A, XK_Z + 1)) key = (Key)((keysym - XK_A) + (KeySym)Key::A);
+  else if (Math::inRange<KeySym>(keysym, XK_a, XK_z + 1)) key = (Key)((keysym - XK_a) + (KeySym)Key::A);
+  else if (Math::inRange<KeySym>(keysym, XK_0, XK_9 + 1)) key = (Key)((keysym - XK_0) + (KeySym)Key::Key0);
+  else if (Math::inRange<KeySym>(keysym, XK_F1, XK_F12 + 1)) key = (Key)((keysym - XK_F1) + (KeySym)Key::F1);
+  else if (Math::inRange<KeySym>(keysym, XK_KP_0, XK_KP_9 + 1)) key = (Key)((keysym - XK_KP_0) + (KeySym)Key::Numpad0);
   else if (keymap.count(keysym) > 0) key = keymap[keysym];
 
   PressState pressState = PressState::Released;
@@ -169,7 +169,16 @@ uint32_t Window::getY() const { return getPosition().y; }
 #pragma endregion WindowAPI
 
 void copyToClipboard(std::string_view text) {
-  // TODO: Do
+  Atom clipboard = XInternAtom(display, "CLIPBOARD", 0);
+  MV_ASSERT(clipboard != None, "Couldn't access X11 clipboard");
+  /* Save the selection on the root window */
+  // XInternAtom(display, selection_type == XA_PRIMARY ? "SDL_CUTBUFFER_PRIMARY_SELECTION" : "SDL_CUTBUFFER",
+  //                              False)
+  // XChangeProperty(display, DefaultRootWindow(display), GetSDLCutBufferClipboardType(display, SDL_X11_CLIPBOARD_MIME_TYPE_STRING, clipboard), X11_GetSDLCutBufferClipboardInternalFormat(display, SDL_X11_CLIPBOARD_MIME_TYPE_STRING), 8, PropModeReplace, (const unsigned char*)text, SDL_strlen(text));
+
+  // if (X11_XGetSelectionOwner(display, selection_type) != window) {
+  //   X11_XSetSelectionOwner(display, selection_type, window, CurrentTime);
+  // }
 }
 } // namespace Mova
 #endif
