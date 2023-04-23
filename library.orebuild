@@ -3,18 +3,18 @@ watch "src/**.h src/**.hpp";
 include "src/";
 flags "-std=c++17";
 
-// For debug
-// flags "-w -DDEBUG -fsanitize=address -g3";
-// linkerFlags "-fsanitize=address";
+[Debug]:
+flags "-w -DDEBUG -fsanitize=address -g3";
+linkerFlags "-fsanitize=address";
 
-// For GCC
+[Linux]:
 linkerFlags "-Ofast -lX11 -lXrandr -lGL";
 // library "imgui";
 
-// For MinGW
-// linkerFlags "-O3 -lgdi32 -lopengl32 -DWIN32_LEAN_AND_MEAN";
+[Windows]:
+linkerFlags "-O3 -lgdi32 -lopengl32 -DWIN32_LEAN_AND_MEAN";
 // library "imgui";
 
-// For Emscripten
-// compiler "emcc";
-// linkerFlags "-sASYNCIFY -lembind --shell-file html/basic_template.html";
+[Emscripten]:
+compiler "emcc";
+linkerFlags "-sASYNCIFY -lembind --shell-file html/basic_template.html";

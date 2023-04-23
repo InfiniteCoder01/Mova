@@ -6,18 +6,18 @@ files "gui.cpp";
 library "Mova";
 flags "-w -Ofast -std=c++17";
 
-// For debug
+[Debug]:
 flags "-DDEBUG -fsanitize=address -g3";
 
-// For GCC
+[Linux];
 output "bin/test";
-library "imgui";
-
-// For MinGW
-// output "test.exe";
 // library "imgui";
 
-// For Emscripten
-// compiler "emcc";
-// flags "--embed-file Assets";
-// output "html/index.html";
+[Windows]:
+output "test.exe";
+// library "imgui";
+
+[Emscripten]:
+compiler "emcc";
+flags "--embed-file Assets";
+output "html/index.html";
