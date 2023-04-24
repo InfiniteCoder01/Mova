@@ -94,8 +94,7 @@ void widgetShrank(VectorMath::vec2u size);
 #pragma region Data
 enum class TextInputType { Text, Multiline, Integer, Decimal };
 struct TextInputState {
-  std::string text;
-  uint32_t cursor = UINT32_MAX, selectionStart = UINT32_MAX;
+  uint32_t cursor = UINT32_MAX, selectionOrigin = UINT32_MAX;
   float cursorBlinkTimer = 0;
 };
 
@@ -109,7 +108,7 @@ void TextUnformatted(std::string_view text);
 void Separator();
 bool Button(std::string_view text);
 bool Switch(bool& value);
-bool TextInput(TextInputState& state, TextInputType type = TextInputType::Text);
+bool TextInput(std::string& text, TextInputState& state, TextInputType type = TextInputType::Text);
 
 // * Widget interactions
 VectorMath::Rect<int32_t> getWidgetRect();

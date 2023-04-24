@@ -719,151 +719,97 @@ bool Switch(bool& value) {
 }
 #pragma endregion SimpleWidgets
 #pragma region TextInput
-
-namespace TextInputInternal { // TODO: rework
-// * Get next cursor position when moving in direction direction, account for Ctrl
-static uint32_t getNextCursorPosition(TextInputState& state, int8_t direction) {
-  auto checkBounds = [&state](uint32_t cursor, int8_t direction) -> bool {
-    if (direction > 0 && cursor >= state.text.length()) return false;
-    if (direction < 0 && cursor <= 0) return false;
-    return true;
-  };
-  uint32_t cursor = state.cursor;
-  if (!checkBounds(cursor, direction)) return cursor;
+static uint32_t nextCursorPosition(uint32_t cursor, const std::string& text, int8_t direction) {
+  if (direction == 0) return cursor;
   if (Mova::isKeyHeld(MvKey::Ctrl)) {
-    do {
+    while (true) {
+      if ((int32_t)cursor + direction < 0 || (int32_t)cursor + direction > text.size()) break;
       cursor += direction;
-    } while (checkBounds(cursor, direction) && state.text[cursor] != ' ');
-  } else cursor += direction;
+      if (cursor == 0 && direction < 0 || iswspace(text[cursor - (direction < 0)])) break;
+    }
+  } else cursor = Math::clamp((int32_t)cursor + direction, 0, text.size());
   return cursor;
 }
-
-// * Erase the selection
-static void eraseSelection(TextInputState& state) {
-  if (state.selectionStart > state.cursor) Math::swap(state.selectionStart, state.cursor);
-  state.text.erase(state.selectionStart, state.cursor - state.selectionStart);
-  state.cursor = state.selectionStart;
-}
-
-// * Erase the region, used with delete and backspace
-static uint32_t eraseRegion(TextInputState& state, int8_t direction) {
-  if (state.selectionStart != state.cursor) {
-    eraseSelection(state);
-    return state.cursor;
-  }
-  const uint32_t newCursor = getNextCursorPosition(state, direction);
-  if (direction < 0) state.text.erase(newCursor, state.cursor - newCursor);
-  else state.text.erase(state.cursor, newCursor - state.cursor);
-  return newCursor;
-}
-
-// * Filter
-void filter(std::string& text, TextInputType type) {
-  if (type == TextInputType::Integer) {
-    text.erase(std::remove_if(text.begin(), text.end(),
-                   [](char c) {
-                     return !std::isdigit(c);
-                   }),
-        text.end());
-  } else if (type == TextInputType::Decimal) {
-    text.erase(std::remove_if(text.begin(), text.end(),
-                   [](char c) {
-                     return !std::isdigit(c) && c != '.';
-                   }),
-        text.end());
-  }
-}
-} // namespace TextInputInternal
 
 /**
  * @brief Text Input Widget
  *
- * @param state the state, just write:
- *     static TextInputState state;
- *     if(TextInput(state)) std::cout << state.text;
+ * @param text Text to edit
+ * @param state The state of the text
  * @param type The type of the widget, one of TextInputType. Can be Text, Multiline, Integer, Decimal
- * @return Is the text changed?
+ * @return Was the text changed?
  */
-bool TextInput(TextInputState& state, TextInputType type) { // TODO: multiline, page up/down / home/end, Clipboard, filter numbers/newlines
-                                                            // FIXME: empty box selection bug
-  using namespace TextInputInternal;
-  bool valueChanged = false;
-
+bool TextInput(std::string& text, TextInputState& state, TextInputType type) {
   if (state.cursor == UINT32_MAX && (type == TextInputType::Integer || type == TextInputType::Decimal)) {
-    if (state.text.empty()) state.text = "0";
+    if (text.empty()) text = "0";
   }
 
-  widget(VectorMath::max(window->getTextSize(state.text), vec2u(style.minimumInputWidth, window->getFont().height())));
-  window->fillRoundRect(getWidgetRectViewportRelative(), style.inputBackground, style.widgetRounding);
-
-  // * Check for mouse moving text cursor
-  bool moveCursor = false;
-  if (Mova::isMouseButtonHeld(Mova::MouseLeft)) {
-    if (isWidgetHovered()) {
-      moveCursor = true;
-      state.cursorBlinkTimer = 0;
-    } else if (Mova::isMouseButtonPressed(Mova::MouseLeft)) state.cursor = state.selectionStart = UINT32_MAX;
-  }
+  widget(VectorMath::max(window->getTextSize(text), vec2u(style.minimumInputWidth, window->getFont().height())));
+  getTarget().fillRoundRect(getWidgetRectViewportRelative(), style.inputBackground, style.widgetRounding);
 
   // * Draw text
-  std::wstring wtext = utf8_to_ws(state.text);
-  vec2i charPos = getWidgetRect().position() + style.framePadding, textBarPos = 0, selectionStartPos = 0;
-  bool clickBarFound = !moveCursor;
-
+  std::wstring wtext = utf8_to_ws(text);
+  vec2i charPos = style.framePadding, cursorPos = charPos;
   for (uint32_t i = 0; i < wtext.size(); i++) {
-    const vec2u size = window->drawChar(charPos + vec2u(0, window->getFont().ascent()) - (currentPopup ? currentPopup->position : 0), wtext[i], style.foregroundColor);
+    const vec2u size = window->drawChar(charPos + vec2u(0, window->getFont().ascent()) + getWidgetRectViewportRelative().position(), wtext[i], style.foregroundColor);
 
-    if (i == state.cursor) textBarPos = charPos;
-    if (i == state.selectionStart) selectionStartPos = charPos;
-    if (!clickBarFound && window->getMouseX() < charPos.x + size.x / 2) {
-      state.cursor = i;
-      clickBarFound = true;
-    }
-    charPos.x += size.x;
+    if (wtext[i] == L'\n') charPos = vec2i(style.framePadding.x, charPos.y + window->getFont().height());
+    else charPos.x += size.x;
+
+    if (state.cursor == i + 1) cursorPos = charPos;
   }
 
-  // * Draw cursor and selection
-  if (state.cursor == state.text.length()) textBarPos = charPos;
-  if (state.selectionStart == state.text.length()) selectionStartPos = charPos;
-  if (!clickBarFound) state.cursor = state.text.length();
-  if (moveCursor && Mova::isMouseButtonPressed(Mova::MouseLeft)) state.selectionStart = state.cursor;
-  if (state.cursor != UINT32_MAX) {
-    if (state.cursorBlinkTimer < 0.25f) {
-      window->fillRect(textBarPos - vec2i(style.textBarThickness / 2, 0), vec2i(style.textBarThickness, window->getFont().height()), style.textBarColor);
-    }
-    if (state.selectionStart != state.cursor) {
-      window->fillRect(selectionStartPos, textBarPos - selectionStartPos + vec2i(0, window->getFont().height()), style.selectionColor);
-    }
+  if (isWidgetPressed()) state.cursor = text.length();
+  else if (Mova::isMouseButtonPressed(MvMouseLeft)) state.cursor = UINT32_MAX;
+  if (state.cursor == UINT32_MAX) return false;
 
-    // * Update cursor and content
-    if (Mova::isKeyRepeated(MvKey::Backspace)) state.cursor = state.selectionStart = eraseRegion(state, -1);
-    if (Mova::isKeyRepeated(MvKey::Delete)) eraseRegion(state, 1);
-    if (Mova::isKeyRepeated(MvKey::Left)) {
-      state.cursor = getNextCursorPosition(state, -1);
-      if (!Mova::isKeyHeld(MvKey::Shift)) state.selectionStart = state.cursor;
-    }
-    if (Mova::isKeyRepeated(MvKey::Right)) {
-      state.cursor = getNextCursorPosition(state, 1);
-      if (!Mova::isKeyHeld(MvKey::Shift)) state.selectionStart = state.cursor;
-    }
-
-    if (Mova::isKeyHeld(MvKey::Ctrl)) {
-      if (Mova::isKeyPressed(MvKey::A)) state.selectionStart = 0, state.cursor = state.text.length();
-    }
-
-    std::string typedText = Mova::getTextTyped();
-    if (!typedText.empty()) {
-      if (state.selectionStart != state.cursor) eraseSelection(state);
-      filter(typedText, type);
-      state.text.insert(state.cursor, typedText);
-      state.selectionStart = state.cursor += typedText.length();
-      valueChanged = true;
-    }
-    state.cursorBlinkTimer += Mova::deltaTime();
-    if (state.cursorBlinkTimer > 0.5f) state.cursorBlinkTimer = 0;
+  if (state.cursorBlinkTimer <= 0.25) {
+    getTarget().fillRect(cursorPos + getWidgetRectViewportRelative().position() - vec2i(1, 0), vec2u(3, window->getFont().height()), style.textBarColor);
   }
 
-  return valueChanged;
+  state.cursorBlinkTimer += Mova::deltaTime();
+  if (state.cursorBlinkTimer >= 0.5f) state.cursorBlinkTimer = 0;
+
+  // * Handle typed text
+  state.cursor = nextCursorPosition(state.cursor, text, Mova::isKeyRepeated(MvKey::Right) - Mova::isKeyRepeated(MvKey::Left));
+
+  std::string typedText = Mova::getTextTyped();
+  if (!typedText.empty()) {
+    std::replace(typedText.begin(), typedText.end(), '\r', '\n');
+    // clang-format off
+    if (type != TextInputType::Multiline) typedText.erase(std::remove(typedText.begin(), typedText.end(), '\n'), typedText.end());
+    if (type == TextInputType::Integer) typedText.erase(std::remove_if(typedText.begin() + (text.empty() && typedText[0] == '-'), typedText.end(), [](char c) { return !isdigit(c); }), typedText.end());
+    else if (type == TextInputType::Decimal) {
+      if (text.find('.') != std::string::npos) typedText.erase(std::remove(typedText.begin(), typedText.end(), '.'), typedText.end());
+      else {
+        auto dot = typedText.find('.');
+        if (dot != std::string::npos) typedText.erase(std::remove(typedText.begin() + dot + 1, typedText.end(), '.'), typedText.end());
+      }
+      typedText.erase(remove_if(typedText.begin() + (text.empty() && typedText[0] == '-'), typedText.end(), [](char c) { return !isdigit(c) && c != '.'; }), typedText.end());
+    }
+    // clang-format on
+
+    text.insert(state.cursor, typedText);
+    state.cursor += typedText.length();
+    return true;
+  }
+  if (Mova::isKeyRepeated(MvKey::Backspace)) {
+    uint32_t newPosition = nextCursorPosition(state.cursor, text, -1);
+    if (newPosition != state.cursor) {
+      text.erase(newPosition, state.cursor - newPosition);
+      state.cursor = newPosition;
+      return true;
+    }
+  }
+  if (Mova::isKeyRepeated(MvKey::Delete)) {
+    uint32_t newPosition = nextCursorPosition(state.cursor, text, 1);
+    if (newPosition != state.cursor) {
+      text.erase(state.cursor, newPosition - state.cursor);
+      return true;
+    }
+  }
+
+  return false;
 }
 #pragma endregion TextInput
 #pragma region Interaction
