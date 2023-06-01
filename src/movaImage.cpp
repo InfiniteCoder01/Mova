@@ -5,6 +5,9 @@
 #include <locale>
 #include <stdint.h>
 #include <utility>
+#if __has_include("omp.h")
+#include <omp.h>
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -256,12 +259,16 @@ void Image::fillRect(int32_t x, int32_t y, int32_t width, int32_t height, Color 
   if (y + height > m_Viewport.height) height = m_Viewport.height - y;
   if (color.a == 255) {
     const uint32_t c = m_ColorMode(color);
+
+#pragma omp parallel for
     for (uint32_t y1 = 0; y1 < height; y1++) {
       uint32_t* lineStart = reinterpret_cast<uint32_t*>(m_Data) + x + m_Viewport.x + (y + y1 + m_Viewport.y) * m_Width;
       std::fill(lineStart, lineStart + width, c);
     }
     return;
   }
+
+#pragma omp parallel for collapse(2)
   for (uint32_t y1 = 0; y1 < height; y1++) {
     for (uint32_t x1 = 0; x1 < width; x1++) {
       set(x + x1, y + y1, alphaBlend(get(x + x1, y + y1), color));
@@ -279,9 +286,17 @@ void Image::drawRect(int32_t x, int32_t y, int32_t width, int32_t height, Color 
 
 void Image::fillRoundRect(int32_t x, int32_t y, int32_t width, int32_t height, Color color, uint8_t rtl, uint8_t rtr, uint8_t rbl, uint8_t rbr) { // TODO: optimize
   MV_ASSERT(m_Data, "Cannot fill: Image data is null!");
+
+  if (rtl == 0 && rtr == 0 && rbl == 0 && rbr == 0) {
+    fillRect(x, y, width, height, color);
+    return;
+  }
+
   if (x + width < 0 || y + height < 0 || x > static_cast<int32_t>(m_Viewport.width) || y > static_cast<int32_t>(m_Viewport.height)) return;
   if (width < 0) x += width, width = -width;
   if (height < 0) y += height, height = -height;
+
+#pragma omp parallel for collapse(2)
   for (uint32_t y1 = Math::max(0, -y); y1 < Math::min(height, m_Viewport.height - y); y1++) {
     for (uint32_t x1 = Math::max(0, -x); x1 < Math::min(width, m_Viewport.width - x); x1++) {
       VectorMath::vec2i roundVector;
@@ -330,13 +345,15 @@ void Image::fastDrawImage(const Image& image, int32_t x, int32_t y) { // TODO: o
   MV_ASSERT(m_Data, "Cannot drawImage: Image data is null!");
   MV_ASSERT(image.data(), "Cannot drawImage: Other image data is null!");
   if (x + static_cast<int32_t>(image.width()) < 0 || y + static_cast<int32_t>(image.height()) < 0 || x > static_cast<int32_t>(m_Viewport.width) || y > static_cast<int32_t>(m_Viewport.height)) return;
+
+#pragma omp parallel for collapse(2)
   for (uint32_t y1 = Math::max(0, -y); y1 < Math::min(image.height(), m_Viewport.height - y); y1++) {
     for (uint32_t x1 = Math::max(0, -x); x1 < Math::min(image.width(), m_Viewport.width - x); x1++) {
       const Color color = image.get(x1, y1);
       if (color.a > 128) set(x + x1, y + y1, color);
     }
   }
-}
+} // namespace Mova
 
 void Image::drawImage(const Image& image, int32_t x, int32_t y, int32_t width, int32_t height, uint32_t srcX, uint32_t srcY, uint32_t srcWidth, uint32_t srcHeight) {
   MV_ASSERT(m_Data, "Cannot drawImage: Image data is null!");
@@ -354,6 +371,8 @@ void Image::drawImage(const Image& image, int32_t x, int32_t y, int32_t width, i
 
   uint32_t isx = Math::max(0, -x), isy = Math::max(0, -y);
   uint32_t iex = Math::min(width, m_Viewport.width - x), iey = Math::min(height, m_Viewport.height - y);
+
+#pragma omp parallel for collapse(2)
   for (uint32_t y1 = isy; y1 < iey; y1++) {
     uint32_t v = static_cast<int32_t>(y1) * mapY / height;
     for (uint32_t x1 = isx; x1 < iex; x1++) {
@@ -383,6 +402,7 @@ VectorMath::vec2u Image::drawText(int32_t x, int32_t y, std::string_view text, C
     if (ch == '\r' || ch == '\n') size.x = Math::max(size.x, characterX - x), characterX = x;
     if (ch == '\n') size.y += m_Font->height(), characterY += m_Font->height();
 
+#pragma omp parallel for collapse(2)
     for (uint32_t y1 = quad.y0; y1 < quad.y1; y1++) {
       for (uint32_t x1 = quad.x0; x1 < quad.x1; x1++) {
         uint32_t u = (x1 - quad.x0) * (quad.s1 - quad.s0) / (quad.x1 - quad.x0) + quad.s0;
@@ -408,6 +428,7 @@ VectorMath::vec2u Image::drawChar(int32_t x, int32_t y, wchar_t character, Color
   m_Font->getQuadFromCodepoint(character, characterX, characterY, quad);
   size.x = characterX - x;
   size.y = Math::max(size.y, quad.y1 - quad.y0);
+#pragma omp parallel for collapse(2)
   for (uint32_t y1 = quad.y0; y1 < quad.y1; y1++) {
     for (uint32_t x1 = quad.x0; x1 < quad.x1; x1++) {
       uint32_t u = (x1 - quad.x0) * (quad.s1 - quad.s0) / (quad.x1 - quad.x0) + quad.s0;

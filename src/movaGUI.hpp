@@ -97,11 +97,6 @@ struct TextInputState {
   uint32_t cursor = UINT32_MAX, selectionOrigin = UINT32_MAX;
   float cursorBlinkTimer = 0;
 };
-
-struct ComboBoxState {
-  bool opened = false, clicked = false;
-  std::string currentItem;
-};
 #pragma endregion Data
 
 void TextUnformatted(std::string_view text);
@@ -285,7 +280,6 @@ template <typename... Args> void Text(std::string_view format, Args... args) { T
 
 using MvGuiTextInputType = MvGui::TextInputType;
 using MvGuiTextInputState = MvGui::TextInputState;
-using MvGuiComboBoxState = MvGui::ComboBoxState;
 
 using MvGuiDockspace = MvGui::Dockspace;
 using MvGuiDockDirection = MvGui::DockDirection;

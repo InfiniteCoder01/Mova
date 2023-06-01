@@ -744,6 +744,8 @@ bool TextInput(std::string& text, TextInputState& state, TextInputType type) {
     if (text.empty()) text = "0";
   }
 
+  if(state.cursor != UINT32_MAX && state.cursor > text.length()) state.cursor = text.length();
+
   widget(VectorMath::max(window->getTextSize(text), vec2u(style.minimumInputWidth, window->getFont().height())));
   getTarget().fillRoundRect(getWidgetRectViewportRelative(), style.inputBackground, style.widgetRounding);
 
